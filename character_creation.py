@@ -1,3 +1,4 @@
+# character_creation.py
 import pygame
 import random
 from typing import List, Tuple, Optional
@@ -1086,7 +1087,20 @@ class CharacterCreator:
     
     def create_player(self) -> Player:
         title = self._get_character_title()
+        con_modifier = self.get_stat_modifier(self.stats[2])
         
+        # Calculate starting HP
+        starting_hp = 0
+        if self.character_class == "Fighter":
+            starting_hp = random.randint(1, 8) + con_modifier
+        elif self.character_class == "Priest":
+            starting_hp = random.randint(1, 6) + con_modifier
+        else: # Thief and Wizard
+            starting_hp = random.randint(1, 4) + con_modifier
+
+        # Ensure HP is at least 1
+        starting_hp = max(1, starting_hp)
+
         return Player(
             name=self.name,
             title=title,
@@ -1094,11 +1108,11 @@ class CharacterCreator:
             alignment=self.alignment,
             character_class=self.character_class,
             level=1,
-            hp=10,
-            max_hp=10,
+            hp=starting_hp,
+            max_hp=starting_hp,
             xp=0,
             xp_to_next_level=100,
-            ac=11,
+            ac=11, # AC is calculated later
             light_duration=TORCH_DURATION_SECONDS,
             light_start_time=time.time(),
             strength=self.stats[0],

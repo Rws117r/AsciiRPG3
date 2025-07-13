@@ -1,0 +1,79 @@
+# game_constants.py - All constants and enums
+from enum import Enum
+from typing import Dict, List
+
+# --- Configuration ---
+JSON_FILE = 'dungeon.json'
+FONT_FILE = 'JetBrainsMonoNL-Regular.ttf'
+BASE_FONT_SIZE = 16
+BASE_CELL_SIZE = 24
+INITIAL_VIEWPORT_WIDTH = 12
+INITIAL_VIEWPORT_HEIGHT = 9
+DEFAULT_ZOOM = 3.3
+MIN_ZOOM = 0.5
+MAX_ZOOM = 4.0
+ZOOM_STEP = 0.1
+HUD_HEIGHT = 120
+
+# --- Colors ---
+COLOR_BG = (183, 172, 160)
+COLOR_VOID = (183, 172, 160)
+COLOR_FLOOR = (240, 236, 224)
+COLOR_FLOOR_GRID = (162, 160, 154)
+COLOR_WALL = (0, 0, 0)
+COLOR_WALL_SHADOW = (140, 134, 125)
+COLOR_DOOR = (197, 185, 172)
+COLOR_NOTE = (255, 255, 0)
+COLOR_PLAYER = (255, 64, 64)
+COLOR_MONSTER = (0, 150, 50)
+COLOR_COLUMN = (100, 100, 100)
+COLOR_WATER = (100, 150, 200)
+COLOR_WHITE = (255, 255, 255)
+COLOR_BLACK = (0, 0, 0)
+COLOR_HP_BAR = (220, 20, 60)
+COLOR_XP_BAR = (135, 206, 250)
+COLOR_BAR_BG = (50, 50, 50)
+COLOR_TORCH_ICON = (255, 165, 0)
+COLOR_SPELL_CURSOR = (255, 0, 255)
+COLOR_SPELL_MENU_BG = (10, 10, 40, 220)
+COLOR_INPUT_BOX_ACTIVE = (200, 200, 255)
+COLOR_INVENTORY_BG = (20, 20, 20)
+COLOR_SELECTED_ITEM = (100, 150, 100)
+COLOR_EQUIPPED_ITEM = (150, 100, 50)
+COLOR_GREEN = (100, 255, 100)
+COLOR_RED = (255, 100, 100)
+
+# --- UI Icons ---
+UI_ICONS = {
+    "DAGGER": "\U0001F5E1",
+    "SHIELD": "\U0001F6E1",
+    "MONSTER": "\U0001F47D",
+    "SPELL_CURSOR": "☄",
+    "HEART": "♥",
+    "SUN": "☼",
+    "GOLD": "¤"
+}
+
+# --- Game States ---
+class GameState(Enum):
+    MAIN_MENU = 0
+    CHAR_CREATION = 1
+    PLAYING = 10
+    SPELL_MENU = 11
+    SPELL_TARGETING = 12
+    INVENTORY = 13
+    EQUIPMENT = 14
+    CONTAINER_VIEW = 15
+    ITEM_ACTION = 16
+    COMBAT = 17
+
+# --- Tile Types ---
+class TileType(Enum):
+    VOID = 0
+    FLOOR = 1
+    DOOR_HORIZONTAL = 2
+    DOOR_VERTICAL = 3
+    DOOR_OPEN = 4
+    NOTE = 5
+    STAIRS_HORIZONTAL = 6
+    STAIRS_VERTICAL = 7

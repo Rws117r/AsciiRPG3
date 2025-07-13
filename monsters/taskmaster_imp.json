@@ -1,0 +1,33 @@
+{
+  "name": "Taskmaster Imp",
+  "description": "A diminutive, fussy fiend that delights in creating convoluted plans and tracking progress with infernal charts. It pesters and prods its victims into endless, pointless activity.",
+  "ascii_char": "I",
+  "ac": 12,
+  "ac_details": "natural armor",
+  "hp": 5,
+  "attacks": [
+    {
+      "name": "Pointy Prod",
+      "details": "+2 (1d4 piercing)",
+      "count": 1
+    }
+  ],
+  "movement": "near (fly)",
+  "stats": {
+    "strength": 8,
+    "dexterity": 12,
+    "constitution": 10,
+    "intelligence": 13,
+    "wisdom": 10,
+    "charisma": 14
+  },
+  "alignment": "L",
+  "level": 1,
+  "special_abilities": [
+    {
+      "name": "Scope Creep",
+      "description": "As a bonus action, the imp can assign a trivial task to one creature it can see. The target must make a DC 12 Wisdom saving throw or have disadvantage on its next attack roll, distracted by the pointless objective."
+    }
+  ],
+  "dark_adapted": true
+}
