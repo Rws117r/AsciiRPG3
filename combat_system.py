@@ -1,4 +1,4 @@
-# combat_system.py - Clean version without problematic type hints
+# combat_system.py - Updated version with combat effects integration
 import pygame
 import random
 from enum import Enum
@@ -53,13 +53,17 @@ class CombatManager:
         self.current_turn_index = 0
         self.combat_log = []
         self.surprise_participants = []
+        # Add reference to dungeon monsters for position updates
+        self.dungeon_monsters = []
         
-    def start_combat(self, player, player_pos, monsters, surprised_monsters=None):
+    def start_combat(self, player, player_pos, monsters, surprised_monsters=None, dungeon_monsters=None):
         """Initialize combat with player and monsters"""
         self.state = CombatState.INITIATIVE_ROLL
         self.participants = []
         self.combat_log = []
         self.surprise_participants = []
+        # Store reference to the dungeon monsters list for position updates
+        self.dungeon_monsters = dungeon_monsters if dungeon_monsters else monsters
         
         # Add player to combat
         player_combat = CombatParticipant(
@@ -279,6 +283,16 @@ class CombatManager:
                 return True
         return False
     
+    def update_dungeon_monster_position(self, combat_monster, new_x, new_y):
+        """Update position of corresponding monster in dungeon list"""
+        for dungeon_monster in self.dungeon_monsters:
+            if (dungeon_monster.x == combat_monster.x and 
+                dungeon_monster.y == combat_monster.y and 
+                dungeon_monster.name == combat_monster.name):
+                dungeon_monster.x = new_x
+                dungeon_monster.y = new_y
+                break
+    
     def get_monsters_in_combat(self):
         """Get all monsters currently in combat"""
         return [p for p in self.participants if isinstance(p, CombatMonster) and p.is_alive and not p.has_fled]
@@ -413,7 +427,11 @@ def handle_monster_ai_turn(monster, player_pos, combat_manager, walkable_positio
                     best_flee_spot = new_pos
         
         if best_flee_spot and calculate_distance(best_flee_spot, player_pos) > calculate_distance(monster_pos, player_pos):
+            # Update position AND sync with dungeon monsters
+            old_x, old_y = monster.x, monster.y
             monster.x, monster.y = best_flee_spot
+            # Update corresponding dungeon monster position
+            combat_manager.update_dungeon_monster_position(monster, monster.x, monster.y)
             combat_manager.log_message(f"{monster.name} flees to ({monster.x}, {monster.y})!")
         else:
             combat_manager.log_message(f"{monster.name} is cornered and can't flee!")
@@ -446,7 +464,11 @@ def handle_monster_ai_turn(monster, player_pos, combat_manager, walkable_positio
                     best_move = new_pos
         
         if best_move != monster_pos:
+            # Update position AND sync with dungeon monsters
+            old_x, old_y = monster.x, monster.y
             monster.x, monster.y = best_move
+            # Update corresponding dungeon monster position
+            combat_manager.update_dungeon_monster_position(monster, monster.x, monster.y)
             combat_manager.log_message(f"{monster.name} moves closer!")
         else:
             combat_manager.log_message(f"{monster.name} holds its position.")

@@ -1,4 +1,4 @@
-# dungeon_viewer.py - Main game file
+# dungeon_viewer.py - Main game file with combat effects integration
 import pygame
 import json
 import time
@@ -18,10 +18,12 @@ from combat_system import (
     draw_health_bars, get_stat_modifier, get_weapon_damage,
     attempt_positional_attack, execute_positional_attack
 )
+# ADD: Import combat effects system
+from combat_effects import CombatEffectsManager, apply_damage_effects, draw_sprite_with_flash, enhanced_make_attack
 
 # --- Combat helper functions ---
-def execute_player_attack(combat_manager: CombatManager, player: Player, target_monster: CombatMonster):
-    """Execute a player attack"""
+def execute_player_attack(combat_manager: CombatManager, player: Player, target_monster: CombatMonster, effects_manager: CombatEffectsManager = None):
+    """Execute a player attack with visual effects"""
     player_participant = combat_manager.get_player_in_combat()
     if player_participant:
         weapon_damage = get_weapon_damage(player)
@@ -31,8 +33,108 @@ def execute_player_attack(combat_manager: CombatManager, player: Player, target_
         if player.character_class == "Fighter":
             attack_bonus += player.level // 2
         
-        combat_manager.make_attack(player_participant, target_monster, weapon_damage, attack_bonus)
+        damage_bonus = get_stat_modifier(player.strength)
+        
+        # Use enhanced attack with effects
+        enhanced_make_attack(combat_manager, player_participant, target_monster, weapon_damage, attack_bonus, damage_bonus, effects_manager)
         combat_manager.advance_turn()
+
+def execute_positional_attack_with_effects(combat_manager: CombatManager, player: Player, target_monster: CombatMonster, effects_manager: CombatEffectsManager = None):
+    """Execute an attack from positional movement with visual effects"""
+    player_participant = combat_manager.get_player_in_combat()
+    if player_participant:
+        weapon_damage = get_weapon_damage(player)
+        
+        # Calculate attack bonus
+        attack_bonus = get_stat_modifier(player.strength)
+        if player.character_class == "Fighter":
+            attack_bonus += player.level // 2
+        
+        # Calculate damage bonus
+        damage_bonus = get_stat_modifier(player.strength)
+        
+        # Use enhanced attack with effects
+        enhanced_make_attack(combat_manager, player_participant, target_monster, weapon_damage, attack_bonus, damage_bonus, effects_manager)
+        combat_manager.advance_turn()
+        return True
+    return False
+
+def handle_monster_ai_turn_with_effects(monster, player_pos, combat_manager, walkable_positions, effects_manager=None):
+    """Handle AI for monster's turn in combat with visual effects."""
+    
+    # Decide if the monster should start fleeing this turn.
+    combat_manager.check_morale(monster)
+
+    player_participant = combat_manager.get_player_in_combat()
+    if not player_participant:
+        return 
+
+    player_pos = (player_participant.x, player_participant.y)
+    monster_pos = (monster.x, monster.y)
+
+    # --- Fleeing Behavior ---
+    if monster.has_fled:
+        best_flee_spot = None
+        max_dist = -1
+
+        # Check all 8 directions for a valid spot to flee to
+        for dx, dy in [(0,1), (0,-1), (1,0), (-1,0), (1,1), (1,-1), (-1,1), (-1,-1)]:
+            new_pos = (monster.x + dx, monster.y + dy)
+            
+            if new_pos in walkable_positions:
+                dist_to_player = calculate_distance(new_pos, player_pos)
+                if dist_to_player > max_dist:
+                    max_dist = dist_to_player
+                    best_flee_spot = new_pos
+        
+        if best_flee_spot and calculate_distance(best_flee_spot, player_pos) > calculate_distance(monster_pos, player_pos):
+            # Update position AND sync with dungeon monsters
+            old_x, old_y = monster.x, monster.y
+            monster.x, monster.y = best_flee_spot
+            # Update corresponding dungeon monster position
+            combat_manager.update_dungeon_monster_position(monster, monster.x, monster.y)
+            combat_manager.log_message(f"{monster.name} flees to ({monster.x}, {monster.y})!")
+        else:
+            combat_manager.log_message(f"{monster.name} is cornered and can't flee!")
+            if is_adjacent(monster_pos, player_pos):
+                 attack_bonus = getattr(monster, 'attack_bonus', 0)
+                 damage_bonus = get_stat_modifier(monster.strength)
+                 damage = monster.damage
+                 # Use enhanced attack with effects
+                 enhanced_make_attack(combat_manager, monster, player_participant, damage, attack_bonus, damage_bonus, effects_manager)
+        
+        return
+
+    # --- Standard Combat Behavior (Attack or Approach) ---
+    if is_adjacent(monster_pos, player_pos):
+        # If adjacent, attack the player
+        attack_bonus = getattr(monster, 'attack_bonus', 0)
+        damage_bonus = get_stat_modifier(monster.strength)
+        damage = monster.damage
+        # Use enhanced attack with effects
+        enhanced_make_attack(combat_manager, monster, player_participant, damage, attack_bonus, damage_bonus, effects_manager)
+    else:
+        # If not adjacent, move towards the player
+        best_move = monster_pos
+        min_dist = calculate_distance(monster_pos, player_pos)
+
+        for dx, dy in [(0,1), (0,-1), (1,0), (-1,0)]: 
+            new_pos = (monster.x + dx, monster.y + dy)
+            if new_pos in walkable_positions:
+                dist = calculate_distance(new_pos, player_pos)
+                if dist < min_dist:
+                    min_dist = dist
+                    best_move = new_pos
+        
+        if best_move != monster_pos:
+            # Update position AND sync with dungeon monsters
+            old_x, old_y = monster.x, monster.y
+            monster.x, monster.y = best_move
+            # Update corresponding dungeon monster position
+            combat_manager.update_dungeon_monster_position(monster, monster.x, monster.y)
+            combat_manager.log_message(f"{monster.name} moves closer!")
+        else:
+            combat_manager.log_message(f"{monster.name} holds its position.")
 
 def main():
     pygame.init()
@@ -67,6 +169,9 @@ def main():
     coords_font = pygame.font.Font(FONT_FILE, 16)
     timer_font = pygame.font.Font(FONT_FILE, 22)
     spell_menu_font = pygame.font.Font(FONT_FILE, 20)
+
+    # ADD: Initialize combat effects manager
+    effects_manager = CombatEffectsManager(FONT_FILE)
 
     # Game state
     game_state = GameState.MAIN_MENU
@@ -105,6 +210,13 @@ def main():
     clock = pygame.time.Clock()
     
     while running:
+        # ADD: Calculate delta time for smooth animations
+        dt = clock.tick(60)
+        dt_seconds = dt / 1000.0
+        
+        # ADD: Update combat effects
+        effects_manager.update(dt_seconds)
+        
         # Get current screen dimensions
         screen_width, screen_height = screen.get_size()
         game_area_height = screen_height - HUD_HEIGHT
@@ -210,7 +322,8 @@ def main():
                                 print(f"Combat initiated with {monster_at_target.name}!")
                                 # Start combat with all monsters adjacent to the player's CURRENT position.
                                 monsters_in_combat, surprised_monsters = check_for_combat(player_pos, dungeon.monsters, dungeon)
-                                combat_manager.start_combat(player, player_pos, monsters_in_combat, surprised_monsters)
+                                # UPDATED: Pass dungeon monsters to combat manager
+                                combat_manager.start_combat(player, player_pos, monsters_in_combat, surprised_monsters, dungeon.monsters)
                                 dex_modifier = get_stat_modifier(player.dexterity)
                                 combat_manager.roll_initiative(dex_modifier)
 
@@ -272,8 +385,8 @@ def main():
                             can_attack, target_monster = attempt_positional_attack(player_pos, next_pos, combat_manager, dungeon.monsters)
                             
                             if can_attack and target_monster:
-                                # Attack the monster!
-                                execute_positional_attack(combat_manager, player, target_monster)
+                                # Attack the monster with effects!
+                                execute_positional_attack_with_effects(combat_manager, player, target_monster, effects_manager)
                             elif next_pos in walkable_positions:
                                 # Safe movement in combat
                                 player_pos = next_pos
@@ -291,11 +404,12 @@ def main():
                                         walkable_positions = dungeon.get_walkable_positions(for_monster=False)
                                         break
                     
-                    # Handle monster turns automatically
+                    # Handle monster turns automatically with effects
                     elif combat_manager.state == CombatState.MONSTER_TURN:
                         current_monster = combat_manager.get_current_participant()
                         if isinstance(current_monster, CombatMonster):
-                            handle_monster_ai_turn(current_monster, player_pos, combat_manager, walkable_positions)
+                            # UPDATED: Pass effects manager to monster AI
+                            handle_monster_ai_turn_with_effects(current_monster, player_pos, combat_manager, walkable_positions, effects_manager)
                             
                             # Update player HP in real-time after monster attack
                             player_participant = combat_manager.get_player_in_combat()
@@ -512,7 +626,7 @@ def main():
             if game_state == GameState.SPELL_TARGETING:
                 draw_spell_range_indicator(viewport_surface, player_pos, current_spell, viewport_x, viewport_y, cell_size, viewport_width_cells, viewport_height_cells)
             
-            # Draw monsters
+            # UPDATED: Draw monsters with flash effects
             for monster in dungeon.monsters:
                 if dungeon.is_revealed(monster.x, monster.y):
                     monster_screen_x = (monster.x - viewport_x) * cell_size + (cell_size // 2)
@@ -524,21 +638,36 @@ def main():
                     else:
                         monster_char = UI_ICONS["MONSTER"]
                     
-                    monster_surf = player_font.render(monster_char, True, COLOR_MONSTER)
-                    monster_rect = monster_surf.get_rect(center=(monster_screen_x, monster_screen_y))
-                    viewport_surface.blit(monster_surf, monster_rect)
+                    # Draw monster with flash effects
+                    draw_sprite_with_flash(
+                        viewport_surface, 
+                        monster_char, 
+                        player_font, 
+                        (monster_screen_x, monster_screen_y), 
+                        COLOR_MONSTER, 
+                        effects_manager, 
+                        monster.x, 
+                        monster.y
+                    )
 
             # Draw combat elements if in combat
             if combat_manager.state != CombatState.NOT_IN_COMBAT:
                 draw_health_bars(viewport_surface, combat_manager, viewport_x, viewport_y, cell_size, hud_font_small)
 
-            # Draw player
+            # UPDATED: Draw player with flash effects
             player_screen_x = (viewport_width_cells // 2) * cell_size + (cell_size // 2)
             player_screen_y = (viewport_height_cells // 2) * cell_size + (cell_size // 2)
             
-            player_surf = player_font.render('@', True, COLOR_PLAYER)
-            player_rect = player_surf.get_rect(center=(player_screen_x, player_screen_y))
-            viewport_surface.blit(player_surf, player_rect)
+            draw_sprite_with_flash(
+                viewport_surface, 
+                '@', 
+                player_font, 
+                (player_screen_x, player_screen_y), 
+                COLOR_PLAYER, 
+                effects_manager, 
+                player_pos[0], 
+                player_pos[1]
+            )
             
             # Draw spell cursor if targeting
             if game_state == GameState.SPELL_TARGETING:
@@ -548,8 +677,14 @@ def main():
                 cursor_rect = cursor_surf.get_rect(center=(cursor_screen_x, cursor_screen_y))
                 viewport_surface.blit(cursor_surf, cursor_rect)
 
+            # ADD: Draw floating damage numbers and effects
+            effects_manager.draw_floating_texts(viewport_surface, viewport_x, viewport_y, cell_size)
+
             # Blit viewport to screen
             screen.blit(viewport_surface, (0, 0))
+            
+            # ADD: Draw screen flash effects (after blitting viewport)
+            effects_manager.draw_screen_flash(screen)
             
             # Display coordinates and timer
             coord_text = f"({player_pos[0]}, {player_pos[1]})"
@@ -584,7 +719,6 @@ def main():
             screen.fill(COLOR_BG)
 
         pygame.display.flip()
-        clock.tick(60)
     
     pygame.quit()
 
