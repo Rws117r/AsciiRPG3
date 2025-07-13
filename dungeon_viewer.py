@@ -1,4 +1,4 @@
-# dungeon_viewer.py - Main game file with combat effects integration
+# dungeon_viewer.py - Improved combat flow
 import pygame
 import json
 import time
@@ -10,7 +10,7 @@ from dungeon_classes import DungeonExplorer
 from ui_systems import *
 from rendering_engine import *
 from character_creation import run_character_creation, Player
-from monster_system import get_monster_database  # Add monster system import
+from monster_system import get_monster_database
 from combat_system import (
     CombatManager, CombatState, CombatActionState, CombatMonster, 
     calculate_distance, is_adjacent, check_for_combat, 
@@ -18,7 +18,6 @@ from combat_system import (
     draw_health_bars, get_stat_modifier, get_weapon_damage,
     attempt_positional_attack, execute_positional_attack
 )
-# ADD: Import combat effects system
 from combat_effects import CombatEffectsManager, apply_damage_effects, draw_sprite_with_flash, enhanced_make_attack
 
 # --- Combat helper functions ---
@@ -37,7 +36,6 @@ def execute_player_attack(combat_manager: CombatManager, player: Player, target_
         
         # Use enhanced attack with effects
         enhanced_make_attack(combat_manager, player_participant, target_monster, weapon_damage, attack_bonus, damage_bonus, effects_manager)
-        combat_manager.advance_turn()
 
 def execute_positional_attack_with_effects(combat_manager: CombatManager, player: Player, target_monster: CombatMonster, effects_manager: CombatEffectsManager = None):
     """Execute an attack from positional movement with visual effects"""
@@ -55,7 +53,6 @@ def execute_positional_attack_with_effects(combat_manager: CombatManager, player
         
         # Use enhanced attack with effects
         enhanced_make_attack(combat_manager, player_participant, target_monster, weapon_damage, attack_bonus, damage_bonus, effects_manager)
-        combat_manager.advance_turn()
         return True
     return False
 
@@ -136,6 +133,45 @@ def handle_monster_ai_turn_with_effects(monster, player_pos, combat_manager, wal
         else:
             combat_manager.log_message(f"{monster.name} holds its position.")
 
+def process_full_combat_round(combat_manager, player, player_pos, target_monster, effects_manager, walkable_positions):
+    """Process a complete combat round: initiative, player action, all monster actions, check for end"""
+    
+    # Step 1: Player acts (attack or move)
+    if target_monster:
+        # Player is attacking
+        execute_positional_attack_with_effects(combat_manager, player, target_monster, effects_manager)
+        combat_manager.log_message(f"{player.name} attacks!")
+    else:
+        # Player is just moving/defending
+        combat_manager.log_message(f"{player.name} moves and defends!")
+    
+    # Step 2: Process all monster turns automatically
+    alive_monsters = combat_manager.get_monsters_in_combat()
+    for monster in alive_monsters:
+        if monster.is_alive and not monster.has_fled:
+            handle_monster_ai_turn_with_effects(monster, player_pos, combat_manager, walkable_positions, effects_manager)
+            
+            # Update player HP in real-time after each monster attack
+            player_participant = combat_manager.get_player_in_combat()
+            if player_participant:
+                player.hp = player_participant.hp
+    
+    # Step 3: Check if combat should end
+    if combat_manager.should_end_combat():
+        combat_manager.end_combat()
+        return True  # Combat ended
+    
+    # Step 4: Reset turn order for next round
+    combat_manager.current_turn_index = 0
+    current = combat_manager.get_current_participant()
+    if current:
+        if isinstance(current, CombatMonster):
+            combat_manager.state = CombatState.MONSTER_TURN
+        else:
+            combat_manager.state = CombatState.PLAYER_TURN
+    
+    return False  # Combat continues
+
 def main():
     pygame.init()
     
@@ -170,7 +206,7 @@ def main():
     timer_font = pygame.font.Font(FONT_FILE, 22)
     spell_menu_font = pygame.font.Font(FONT_FILE, 20)
 
-    # ADD: Initialize combat effects manager
+    # Initialize combat effects manager
     effects_manager = CombatEffectsManager(FONT_FILE)
 
     # Game state
@@ -210,11 +246,11 @@ def main():
     clock = pygame.time.Clock()
     
     while running:
-        # ADD: Calculate delta time for smooth animations
+        # Calculate delta time for smooth animations
         dt = clock.tick(60)
         dt_seconds = dt / 1000.0
         
-        # ADD: Update combat effects
+        # Update combat effects
         effects_manager.update(dt_seconds)
         
         # Get current screen dimensions
@@ -318,14 +354,59 @@ def main():
                                     break
                             
                             if monster_at_target:
-                                # Attempting to move into a monster starts combat. Do not move the player.
+                                # IMPROVED: Initiate combat and immediately process first round
                                 print(f"Combat initiated with {monster_at_target.name}!")
-                                # Start combat with all monsters adjacent to the player's CURRENT position.
+                                
+                                # Start combat with all monsters adjacent to the player's CURRENT position
                                 monsters_in_combat, surprised_monsters = check_for_combat(player_pos, dungeon.monsters, dungeon)
-                                # UPDATED: Pass dungeon monsters to combat manager
                                 combat_manager.start_combat(player, player_pos, monsters_in_combat, surprised_monsters, dungeon.monsters)
+                                
+                                # Roll initiative
                                 dex_modifier = get_stat_modifier(player.dexterity)
                                 combat_manager.roll_initiative(dex_modifier)
+                                
+                                # Find the target monster in combat participants
+                                target_combat_monster = None
+                                for combat_participant in combat_manager.participants:
+                                    if (isinstance(combat_participant, CombatMonster) and 
+                                        combat_participant.x == monster_at_target.x and 
+                                        combat_participant.y == monster_at_target.y):
+                                        target_combat_monster = combat_participant
+                                        break
+                                
+                                # Process the full combat round immediately
+                                combat_ended = process_full_combat_round(
+                                    combat_manager, player, player_pos, target_combat_monster, 
+                                    effects_manager, walkable_positions
+                                )
+                                
+                                if combat_ended:
+                                    # Handle combat end immediately
+                                    player_participant = combat_manager.get_player_in_combat()
+                                    if player_participant:
+                                        player.hp = player_participant.hp
+                                    
+                                    # Update dungeon monsters
+                                    monsters_to_remove = []
+                                    all_combat_monsters = [p for p in combat_manager.participants if isinstance(p, CombatMonster)]
+
+                                    for combat_monster in all_combat_monsters:
+                                        for dungeon_monster in dungeon.monsters:
+                                            if (dungeon_monster.x == combat_monster.x and 
+                                                dungeon_monster.y == combat_monster.y):
+                                                if not combat_monster.is_alive:
+                                                    if dungeon_monster not in monsters_to_remove:
+                                                        monsters_to_remove.append(dungeon_monster)
+                                                else:
+                                                    dungeon_monster.current_hp = combat_monster.hp
+                                                    if hasattr(combat_monster, 'has_fled'):
+                                                        dungeon_monster.fled = combat_monster.has_fled
+                                                break
+
+                                    for dead in monsters_to_remove:
+                                        dungeon.monsters.remove(dead)
+                                    
+                                    combat_manager.state = CombatState.NOT_IN_COMBAT
 
                             elif next_pos in walkable_positions:
                                 # Safe movement, no monster at destination
@@ -356,9 +437,9 @@ def main():
                                         if next_monster_pos in monster_walkable and next_monster_pos not in occupied_tiles:
                                             monster.x, monster.y = next_monster_pos
                     
-                    # POSITIONAL COMBAT - Player's turn in combat
+                    # IMPROVED: Positional combat during player's turn
                     elif combat_manager.state == CombatState.PLAYER_TURN:
-                        # In combat, movement = attack if moving into monster
+                        # In combat, movement = attack if moving into monster, or movement + full round processing
                         next_pos = player_pos
                         moved = False
                         
@@ -375,9 +456,39 @@ def main():
                             next_pos = (player_pos[0] + 1, player_pos[1])
                             moved = True
                         elif event.key == pygame.K_SPACE:
-                            # Space = skip turn / defend
-                            combat_manager.log_message(f"{player.name} waits and defends!")
-                            combat_manager.advance_turn()
+                            # Space = skip turn / defend - process full round with no target
+                            combat_ended = process_full_combat_round(
+                                combat_manager, player, player_pos, None, 
+                                effects_manager, walkable_positions
+                            )
+                            
+                            if combat_ended:
+                                # Handle combat end
+                                player_participant = combat_manager.get_player_in_combat()
+                                if player_participant:
+                                    player.hp = player_participant.hp
+                                
+                                # Update dungeon monsters (same code as above)
+                                monsters_to_remove = []
+                                all_combat_monsters = [p for p in combat_manager.participants if isinstance(p, CombatMonster)]
+
+                                for combat_monster in all_combat_monsters:
+                                    for dungeon_monster in dungeon.monsters:
+                                        if (dungeon_monster.x == combat_monster.x and 
+                                            dungeon_monster.y == combat_monster.y):
+                                            if not combat_monster.is_alive:
+                                                if dungeon_monster not in monsters_to_remove:
+                                                    monsters_to_remove.append(dungeon_monster)
+                                            else:
+                                                dungeon_monster.current_hp = combat_monster.hp
+                                                if hasattr(combat_monster, 'has_fled'):
+                                                    dungeon_monster.fled = combat_monster.has_fled
+                                            break
+
+                                for dead in monsters_to_remove:
+                                    dungeon.monsters.remove(dead)
+                                
+                                combat_manager.state = CombatState.NOT_IN_COMBAT
                             moved = False
                         
                         if moved:
@@ -385,13 +496,75 @@ def main():
                             can_attack, target_monster = attempt_positional_attack(player_pos, next_pos, combat_manager, dungeon.monsters)
                             
                             if can_attack and target_monster:
-                                # Attack the monster with effects!
-                                execute_positional_attack_with_effects(combat_manager, player, target_monster, effects_manager)
+                                # Process full combat round with this attack
+                                combat_ended = process_full_combat_round(
+                                    combat_manager, player, player_pos, target_monster, 
+                                    effects_manager, walkable_positions
+                                )
+                                
+                                if combat_ended:
+                                    # Handle combat end (same code as above)
+                                    player_participant = combat_manager.get_player_in_combat()
+                                    if player_participant:
+                                        player.hp = player_participant.hp
+                                    
+                                    monsters_to_remove = []
+                                    all_combat_monsters = [p for p in combat_manager.participants if isinstance(p, CombatMonster)]
+
+                                    for combat_monster in all_combat_monsters:
+                                        for dungeon_monster in dungeon.monsters:
+                                            if (dungeon_monster.x == combat_monster.x and 
+                                                dungeon_monster.y == combat_monster.y):
+                                                if not combat_monster.is_alive:
+                                                    if dungeon_monster not in monsters_to_remove:
+                                                        monsters_to_remove.append(dungeon_monster)
+                                                else:
+                                                    dungeon_monster.current_hp = combat_monster.hp
+                                                    if hasattr(combat_monster, 'has_fled'):
+                                                        dungeon_monster.fled = combat_monster.has_fled
+                                                break
+
+                                    for dead in monsters_to_remove:
+                                        dungeon.monsters.remove(dead)
+                                    
+                                    combat_manager.state = CombatState.NOT_IN_COMBAT
+                                    
                             elif next_pos in walkable_positions:
-                                # Safe movement in combat
+                                # Safe movement in combat - process full round with movement
                                 player_pos = next_pos
                                 combat_manager.log_message(f"{player.name} moves to {next_pos}")
-                                combat_manager.advance_turn()
+                                
+                                combat_ended = process_full_combat_round(
+                                    combat_manager, player, player_pos, None, 
+                                    effects_manager, walkable_positions
+                                )
+                                
+                                if combat_ended:
+                                    # Handle combat end (same code as above)
+                                    player_participant = combat_manager.get_player_in_combat()
+                                    if player_participant:
+                                        player.hp = player_participant.hp
+                                    
+                                    monsters_to_remove = []
+                                    all_combat_monsters = [p for p in combat_manager.participants if isinstance(p, CombatMonster)]
+
+                                    for combat_monster in all_combat_monsters:
+                                        for dungeon_monster in dungeon.monsters:
+                                            if (dungeon_monster.x == combat_monster.x and 
+                                                dungeon_monster.y == combat_monster.y):
+                                                if not combat_monster.is_alive:
+                                                    if dungeon_monster not in monsters_to_remove:
+                                                        monsters_to_remove.append(dungeon_monster)
+                                                else:
+                                                    dungeon_monster.current_hp = combat_monster.hp
+                                                    if hasattr(combat_monster, 'has_fled'):
+                                                        dungeon_monster.fled = combat_monster.has_fled
+                                                break
+
+                                    for dead in monsters_to_remove:
+                                        dungeon.monsters.remove(dead)
+                                    
+                                    combat_manager.state = CombatState.NOT_IN_COMBAT
                             else:
                                 # Can't move there
                                 combat_manager.log_message("Can't move there!")
@@ -403,53 +576,6 @@ def main():
                                     if dungeon.open_door_at_position(player_pos[0] + dx, player_pos[1] + dy):
                                         walkable_positions = dungeon.get_walkable_positions(for_monster=False)
                                         break
-                    
-                    # Handle monster turns automatically with effects
-                    elif combat_manager.state == CombatState.MONSTER_TURN:
-                        current_monster = combat_manager.get_current_participant()
-                        if isinstance(current_monster, CombatMonster):
-                            # UPDATED: Pass effects manager to monster AI
-                            handle_monster_ai_turn_with_effects(current_monster, player_pos, combat_manager, walkable_positions, effects_manager)
-                            
-                            # Update player HP in real-time after monster attack
-                            player_participant = combat_manager.get_player_in_combat()
-                            if player_participant:
-                                player.hp = player_participant.hp
-
-                            combat_manager.advance_turn()
-                    
-                    # Handle combat end
-                    elif combat_manager.state == CombatState.COMBAT_OVER:
-                        combat_manager.state = CombatState.NOT_IN_COMBAT
-                        
-                        # Update player's final HP from the combat session
-                        player_participant = combat_manager.get_player_in_combat()
-                        if player_participant:
-                            player.hp = player_participant.hp
-                        
-                        # Update the master list of dungeon monsters with the results of the combat
-                        monsters_to_remove = []
-                        all_combat_monsters = [p for p in combat_manager.participants if isinstance(p, CombatMonster)]
-
-                        for combat_monster in all_combat_monsters:
-                            # Find the corresponding monster in the main dungeon list
-                            for dungeon_monster in dungeon.monsters:
-                                if dungeon_monster.x == combat_monster.x and dungeon_monster.y == combat_monster.y:
-                                    if not combat_monster.is_alive:
-                                        # Mark dead monsters for removal
-                                        if dungeon_monster not in monsters_to_remove:
-                                            monsters_to_remove.append(dungeon_monster)
-                                    else:
-                                        # Update state of surviving/fleeing monsters
-                                        dungeon_monster.current_hp = combat_monster.hp
-                                        if hasattr(combat_monster, 'has_fled'):
-                                            dungeon_monster.fled = combat_monster.has_fled
-                                    break # Move to the next combat monster
-
-                        # Remove the dead monsters from the main list
-                        for dead in monsters_to_remove:
-                            dungeon.monsters.remove(dead)
-
 
                 # Spell menu controls
                 elif game_state == GameState.SPELL_MENU:
@@ -626,7 +752,7 @@ def main():
             if game_state == GameState.SPELL_TARGETING:
                 draw_spell_range_indicator(viewport_surface, player_pos, current_spell, viewport_x, viewport_y, cell_size, viewport_width_cells, viewport_height_cells)
             
-            # UPDATED: Draw monsters with flash effects
+            # Draw monsters with flash effects
             for monster in dungeon.monsters:
                 if dungeon.is_revealed(monster.x, monster.y):
                     monster_screen_x = (monster.x - viewport_x) * cell_size + (cell_size // 2)
@@ -654,7 +780,7 @@ def main():
             if combat_manager.state != CombatState.NOT_IN_COMBAT:
                 draw_health_bars(viewport_surface, combat_manager, viewport_x, viewport_y, cell_size, hud_font_small)
 
-            # UPDATED: Draw player with flash effects
+            # Draw player with flash effects
             player_screen_x = (viewport_width_cells // 2) * cell_size + (cell_size // 2)
             player_screen_y = (viewport_height_cells // 2) * cell_size + (cell_size // 2)
             
@@ -677,13 +803,13 @@ def main():
                 cursor_rect = cursor_surf.get_rect(center=(cursor_screen_x, cursor_screen_y))
                 viewport_surface.blit(cursor_surf, cursor_rect)
 
-            # ADD: Draw floating damage numbers and effects
+            # Draw floating damage numbers and effects
             effects_manager.draw_floating_texts(viewport_surface, viewport_x, viewport_y, cell_size)
 
             # Blit viewport to screen
             screen.blit(viewport_surface, (0, 0))
             
-            # ADD: Draw screen flash effects (after blitting viewport)
+            # Draw screen flash effects (after blitting viewport)
             effects_manager.draw_screen_flash(screen)
             
             # Display coordinates and timer
@@ -696,7 +822,7 @@ def main():
             # Draw HUD
             draw_hud(screen, player, hud_font_large, hud_font_medium, hud_font_small)
 
-            # Draw combat UI if in combat (simplified - no action menu needed)
+            # Draw combat UI if in combat (simplified)
             if combat_manager.state != CombatState.NOT_IN_COMBAT:
                 draw_combat_ui(screen, combat_manager, hud_font_medium, hud_font_small)
                 
