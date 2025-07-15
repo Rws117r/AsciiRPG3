@@ -1,9 +1,10 @@
-# ecs_input_handler.py - ECS-based input handling
+# ecs_input_handler.py - ECS-based input handling (Phase 3 Fixed)
 
 import pygame
 from typing import Dict, Callable, Optional
 from ecs_core import World, EntityID
-from ecs_systems import *
+from ecs_components import PositionComponent
+from ecs_systems import MoveEvent, WaitEvent, InteractionEvent, UIEvent
 
 class ECSInputHandler:
     """Handles input and converts to ECS events"""
@@ -93,16 +94,3 @@ class ECSInputHandler:
                 return True
         
         return False
-
-# Add these new event types to ecs_systems.py
-
-@dataclass
-class WaitEvent:
-    """Entity waits/defends for a turn"""
-    entity: EntityID
-
-@dataclass
-class UIEvent:
-    """Request to open UI screen"""
-    ui_type: str  # 'inventory', 'equipment', 'spells'
-    entity: EntityID

@@ -1,4 +1,4 @@
-# ecs_systems.py - System implementations for the ECS architecture
+# ecs_systems.py - System implementations for the ECS architecture (Phase 3 Complete)
 
 from typing import List, Set, Tuple, Optional, Dict, Any
 import random
@@ -7,6 +7,110 @@ from dataclasses import dataclass
 
 from ecs_core import System, World, EntityID
 from ecs_components import *
+
+# =============================================================================
+# EVENT DEFINITIONS - Events that systems can process
+# =============================================================================
+
+@dataclass
+class MoveEvent:
+    """Entity wants to move"""
+    entity: EntityID
+    from_pos: Tuple[int, int]
+    to_pos: Tuple[int, int]
+
+@dataclass
+class MovementCompletedEvent:
+    """Entity successfully moved"""
+    entity: EntityID
+    from_pos: Tuple[int, int]
+    to_pos: Tuple[int, int]
+
+@dataclass
+class EntityPushedEvent:
+    """Entity was pushed by another entity"""
+    pusher: EntityID
+    pushee: EntityID
+    new_position: Tuple[int, int]
+
+@dataclass
+class DamageEvent:
+    """Entity takes damage"""
+    target: EntityID
+    damage: int
+    damage_type: str = "physical"
+    source: Optional[EntityID] = None
+
+@dataclass
+class DamageAppliedEvent:
+    """Damage was applied to entity"""
+    target: EntityID
+    actual_damage: int
+    entity_died: bool
+
+@dataclass
+class HealEvent:
+    """Entity is healed"""
+    target: EntityID
+    amount: int
+    source: Optional[EntityID] = None
+
+@dataclass
+class HealingAppliedEvent:
+    """Healing was applied to entity"""
+    target: EntityID
+    actual_healing: int
+
+@dataclass
+class EntityDeathEvent:
+    """Entity died"""
+    entity: EntityID
+    killer: Optional[EntityID] = None
+
+@dataclass
+class InteractionEvent:
+    """Entity interacts with another entity"""
+    actor: EntityID
+    target: Optional[EntityID]
+    interaction_type: str = "generic"
+
+@dataclass
+class InteractionSuccessEvent:
+    """Interaction succeeded"""
+    actor: EntityID
+    target: EntityID
+    interaction_type: str
+
+@dataclass
+class InteractionFailedEvent:
+    """Interaction failed"""
+    actor: EntityID
+    target: Optional[EntityID]
+    reason: str
+
+@dataclass
+class ExaminationEvent:
+    """Entity examines a position"""
+    examiner: EntityID
+    target_pos: Tuple[int, int]
+    distance: int
+
+@dataclass
+class WaitEvent:
+    """Entity waits/defends for a turn"""
+    entity: EntityID
+
+@dataclass
+class UIEvent:
+    """Request to open UI screen"""
+    ui_type: str  # 'inventory', 'equipment', 'spells'
+    entity: EntityID
+
+@dataclass
+class ExperienceGainEvent:
+    """Entity gains experience"""
+    entity: EntityID
+    amount: int
 
 # =============================================================================
 # CORE SYSTEMS - Essential functionality
@@ -64,7 +168,7 @@ class MovementSystem(System):
             if isinstance(event, MoveEvent):
                 self.process_movement(world, event)
     
-    def process_movement(self, world: World, move_event: 'MoveEvent'):
+    def process_movement(self, world: World, move_event: MoveEvent):
         """Process a single movement event"""
         entity = move_event.entity
         new_x, new_y = move_event.to_pos
@@ -170,8 +274,6 @@ class MovementSystem(System):
         
         return False
 
-# Add these new systems to ecs_systems.py
-
 class PlayerInputSystem(System):
     """Processes player input events"""
     
@@ -209,7 +311,7 @@ class ExperienceSystem(System):
             if isinstance(event, ExperienceGainEvent):
                 self._process_experience_gain(world, event)
     
-    def _process_experience_gain(self, world: World, event: 'ExperienceGainEvent'):
+    def _process_experience_gain(self, world: World, event: ExperienceGainEvent):
         """Process experience gain"""
         exp_comp = world.get_component(event.entity, ExperienceComponent)
         if not exp_comp:
@@ -234,7 +336,6 @@ class ExperienceSystem(System):
         
         if health_comp and class_comp and stats_comp:
             # Calculate HP gain
-            import random
             con_mod = stats_comp.get_modifier('constitution')
             
             if class_comp.character_class == "Fighter":
@@ -253,12 +354,6 @@ class ExperienceSystem(System):
             name = name_comp.name if name_comp else "Unknown"
             print(f"{name} reached level {exp_comp.level}! HP increased by {hp_gain}!")
 
-# Add new event types
-@dataclass
-class ExperienceGainEvent:
-    """Entity gains experience"""
-    entity: EntityID
-    amount: int
 class HealthSystem(System):
     """Manages entity health and death"""
     
@@ -273,7 +368,7 @@ class HealthSystem(System):
         # Check for dead entities
         self._check_for_deaths(world)
     
-    def process_damage(self, world: World, damage_event: 'DamageEvent'):
+    def process_damage(self, world: World, damage_event: DamageEvent):
         """Apply damage to an entity"""
         target = damage_event.target
         health = world.get_component(target, HealthComponent)
@@ -291,7 +386,7 @@ class HealthSystem(System):
         if health.current_hp <= 0:
             world.add_event(EntityDeathEvent(target, damage_event.source))
     
-    def process_healing(self, world: World, heal_event: 'HealEvent'):
+    def process_healing(self, world: World, heal_event: HealEvent):
         """Apply healing to an entity"""
         target = heal_event.target
         health = world.get_component(target, HealthComponent)
@@ -415,14 +510,22 @@ class InteractionSystem(System):
             if isinstance(event, InteractionEvent):
                 self.process_interaction(world, event)
     
-    def process_interaction(self, world: World, interaction_event: 'InteractionEvent'):
+    def process_interaction(self, world: World, interaction_event: InteractionEvent):
         """Process a single interaction"""
         actor = interaction_event.actor
         target = interaction_event.target
         
+        # If no specific target, find nearby interactable entities
+        if target is None:
+            target = self._find_nearby_interactable(world, actor)
+            if target is None:
+                world.add_event(InteractionFailedEvent(actor, None, "Nothing to interact with"))
+                return False
+        
         # Check if target is interactable
         interactable = world.get_component(target, InteractableComponent)
         if not interactable:
+            world.add_event(InteractionFailedEvent(actor, target, "Not interactable"))
             return False
         
         # Check distance if required
@@ -445,6 +548,21 @@ class InteractionSystem(System):
             world.add_event(InteractionSuccessEvent(actor, target, interactable.interaction_type))
         
         return success
+    
+    def _find_nearby_interactable(self, world: World, actor: EntityID) -> Optional[EntityID]:
+        """Find nearby interactable entities"""
+        actor_pos = world.get_component(actor, PositionComponent)
+        if not actor_pos:
+            return None
+        
+        interactable_entities = world.get_entities_with_components(PositionComponent, InteractableComponent)
+        
+        for entity in interactable_entities:
+            entity_pos = world.get_component(entity, PositionComponent)
+            if entity_pos and actor_pos.distance_to(entity_pos) <= 1:
+                return entity
+        
+        return None
     
     def _are_adjacent(self, world: World, entity1: EntityID, entity2: EntityID) -> bool:
         """Check if two entities are adjacent"""
@@ -534,93 +652,6 @@ class InteractionSystem(System):
         # Add blessing to actor
         world.add_component(actor, BlessedComponent(duration_remaining=10, bonus_amount=1))
         return True
-
-# =============================================================================
-# EVENT DEFINITIONS - Events that systems can process
-# =============================================================================
-
-@dataclass
-class MoveEvent:
-    """Entity wants to move"""
-    entity: EntityID
-    from_pos: Tuple[int, int]
-    to_pos: Tuple[int, int]
-
-@dataclass
-class MovementCompletedEvent:
-    """Entity successfully moved"""
-    entity: EntityID
-    from_pos: Tuple[int, int]
-    to_pos: Tuple[int, int]
-
-@dataclass
-class EntityPushedEvent:
-    """Entity was pushed by another entity"""
-    pusher: EntityID
-    pushee: EntityID
-    new_position: Tuple[int, int]
-
-@dataclass
-class DamageEvent:
-    """Entity takes damage"""
-    target: EntityID
-    damage: int
-    damage_type: str = "physical"
-    source: Optional[EntityID] = None
-
-@dataclass
-class DamageAppliedEvent:
-    """Damage was applied to entity"""
-    target: EntityID
-    actual_damage: int
-    entity_died: bool
-
-@dataclass
-class HealEvent:
-    """Entity is healed"""
-    target: EntityID
-    amount: int
-    source: Optional[EntityID] = None
-
-@dataclass
-class HealingAppliedEvent:
-    """Healing was applied to entity"""
-    target: EntityID
-    actual_healing: int
-
-@dataclass
-class EntityDeathEvent:
-    """Entity died"""
-    entity: EntityID
-    killer: Optional[EntityID] = None
-
-@dataclass
-class InteractionEvent:
-    """Entity interacts with another entity"""
-    actor: EntityID
-    target: EntityID
-    interaction_type: str = "generic"
-
-@dataclass
-class InteractionSuccessEvent:
-    """Interaction succeeded"""
-    actor: EntityID
-    target: EntityID
-    interaction_type: str
-
-@dataclass
-class InteractionFailedEvent:
-    """Interaction failed"""
-    actor: EntityID
-    target: EntityID
-    reason: str
-
-@dataclass
-class ExaminationEvent:
-    """Entity examines a position"""
-    examiner: EntityID
-    target_pos: Tuple[int, int]
-    distance: int
 
 # =============================================================================
 # UTILITY FUNCTIONS

@@ -1,4 +1,4 @@
-# ecs_entities.py - Entity builders and templates for creating common game entities
+# ecs_entities.py - Entity builders and templates for creating common game entities (Phase 3 Fixed)
 
 from typing import Dict, List, Optional, Tuple
 import random
@@ -6,8 +6,9 @@ import random
 from ecs_core import World, EntityID
 from ecs_components import *
 
-    # Add this enhanced method to EntityBuilder class in ecs_entities.py
-
+class EntityBuilder:
+    """Factory class for creating common game entities"""
+    
     @staticmethod
     def create_player_from_character_data(world: World, character_data: dict) -> EntityID:
         """Create a complete player entity from character creation data"""
@@ -568,7 +569,13 @@ def create_test_world() -> World:
     world = World()
     
     # Create a player
-    player = EntityBuilder.create_player(world, "Test Hero", 5, 5, "Fighter", "Human")
+    player = EntityBuilder.create_player_from_character_data(world, {
+        'name': 'Test Hero',
+        'x': 5,
+        'y': 5,
+        'character_class': 'Fighter',
+        'race': 'Human'
+    })
     
     # Create some monsters (2 total)
     goblin = EntityBuilder.create_goblin(world, 7, 5)
@@ -579,6 +586,4 @@ def create_test_world() -> World:
     door = EntityBuilder.create_door(world, 8, 5, door_type=1, is_horizontal=False)
     
     # That's exactly 5 entities: player + goblin + rat + chest + door
-    # Remove the extra entities that were causing the test to fail
-    
     return world

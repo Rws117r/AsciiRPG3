@@ -6,6 +6,7 @@ from typing import Optional, Dict, Any
 
 from ecs_core import World, EntityID
 from ecs_components import *
+from ecs_input_handler import *
 from ecs_systems import *
 from ecs_entities import EntityBuilder, create_test_world
 from game_constants import GameState, TileType
