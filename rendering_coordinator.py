@@ -1,4 +1,4 @@
-# rendering_coordinator.py - Rendering pipeline coordination
+# rendering_coordinator.py - Rendering pipeline coordination with examination system
 import pygame
 from typing import Optional, List
 from game_constants import *

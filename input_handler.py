@@ -1,7 +1,7 @@
-# input_handler.py - Fixed version with proper equipment and inventory navigation
+# input_handler.py - Updated version with examination system support
 import pygame
 from typing import Callable, Optional, Dict
-from game_constants import GameState
+from game_constants import GameState, ExamineMode
 
 class InputHandler:
     """Handles all input processing and maps events to game actions."""
@@ -13,6 +13,7 @@ class InputHandler:
         self.system_callbacks: Dict[str, Callable] = {}
         self.navigation_callback: Optional[Callable] = None
         self.selection_callback: Optional[Callable] = None
+        self.examination_callback: Optional[Callable] = None
         
         # Key mappings
         self.movement_keys = {
@@ -25,7 +26,8 @@ class InputHandler:
         self.menu_keys = {
             pygame.K_i: 'inventory',
             pygame.K_e: 'equipment', 
-            pygame.K_m: 'spells'
+            pygame.K_m: 'spells',
+            pygame.K_l: 'examine'  # New examination key
         }
         
         self.system_keys = {
@@ -55,16 +57,22 @@ class InputHandler:
         """Set callback for UI selection."""
         self.selection_callback = callback
     
-    def handle_event(self, event: pygame.event.Event, game_state: GameState) -> Optional[str]:
+    def set_examination_callback(self, callback: Callable):
+        """Set callback for examination system."""
+        self.examination_callback = callback
+    
+    def handle_event(self, event: pygame.event.Event, game_state: GameState, 
+                    examine_mode: ExamineMode = ExamineMode.INACTIVE) -> Optional[str]:
         """Handle a pygame event based on current game state."""
         if event.type == pygame.KEYDOWN:
-            return self._handle_keydown(event, game_state)
+            return self._handle_keydown(event, game_state, examine_mode)
         elif event.type == pygame.VIDEORESIZE:
             return self._handle_resize(event)
         
         return None
     
-    def _handle_keydown(self, event: pygame.event.Event, game_state: GameState) -> Optional[str]:
+    def _handle_keydown(self, event: pygame.event.Event, game_state: GameState, 
+                       examine_mode: ExamineMode) -> Optional[str]:
         """Handle keydown events."""
         key = event.key
         
@@ -74,9 +82,14 @@ class InputHandler:
             if action in self.system_callbacks:
                 return self.system_callbacks[action]()
         
+        # If in examination mode, handle examination input first
+        if examine_mode != ExamineMode.INACTIVE:
+            if self.examination_callback:
+                return self.examination_callback(event, examine_mode)
+        
         # State-specific handling
         if game_state == GameState.PLAYING:
-            return self._handle_playing_input(key)
+            return self._handle_playing_input(key, examine_mode)
         elif game_state == GameState.INVENTORY:
             return self._handle_inventory_input(key)
         elif game_state == GameState.EQUIPMENT:
@@ -88,8 +101,12 @@ class InputHandler:
         
         return None
     
-    def _handle_playing_input(self, key: int) -> Optional[str]:
+    def _handle_playing_input(self, key: int, examine_mode: ExamineMode) -> Optional[str]:
         """Handle input during gameplay."""
+        # Don't handle movement if in examination mode
+        if examine_mode != ExamineMode.INACTIVE:
+            return None
+        
         # Movement
         if key in self.movement_keys:
             direction = self.movement_keys[key]

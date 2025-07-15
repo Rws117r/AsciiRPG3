@@ -1,4 +1,4 @@
-# game_constants.py - Enhanced with puzzle elements
+# game_constants.py - Enhanced with puzzle elements and examination system
 from enum import Enum
 from typing import Dict, List
 
@@ -55,6 +55,12 @@ COLOR_BARRIER = (255, 0, 0)
 COLOR_CHEST = (160, 82, 45)
 COLOR_TRAP_INDICATOR = (255, 165, 0)
 
+# Examination system colors
+COLOR_EXAMINE_CURSOR = (255, 255, 0)
+COLOR_EXAMINE_HIGHLIGHT = (255, 255, 0, 100)
+COLOR_EXAMINE_TEXTBOX_BG = (0, 0, 0, 200)
+COLOR_ACTION_MENU_BG = (0, 0, 0, 240)
+
 # --- UI Icons ---
 UI_ICONS = {
     "DAGGER": "\U0001F5E1",
@@ -72,7 +78,10 @@ UI_ICONS = {
     "GLYPH": "∴",
     "BARRIER": "≡",
     "STAIRS_DOWN": "∇",
-    "CHEST": "⊠"
+    "CHEST": "⊠",
+    # Examination system
+    "EXAMINE_CURSOR": "✚",
+    "LOOK_ICON": "👁"
 }
 
 # --- Game States ---
@@ -87,6 +96,7 @@ class GameState(Enum):
     CONTAINER_VIEW = 15
     ITEM_ACTION = 16
     COMBAT = 17
+    EXAMINING = 18  # New state for examination mode
 
 # --- Tile Types ---
 class TileType(Enum):
@@ -124,3 +134,16 @@ class PuzzleState(Enum):
     SOLVING = 2
     SOLVED = 3
     FAILED = 4
+
+# --- Examination System Types ---
+class ExamineMode(Enum):
+    INACTIVE = 0
+    LOOKING = 1
+    ACTION_MENU = 2
+
+class ActionCategory(Enum):
+    MOVEMENT = "movement"
+    SPELL = "spell" 
+    ITEM = "item"
+    INTERACTION = "interaction"
+    COMBAT = "combat"

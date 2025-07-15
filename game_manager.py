@@ -1,4 +1,4 @@
-# game_manager.py - Complete fixed version with navigation and respawn
+# game_manager.py - Complete fixed version with examination system integration
 import pygame
 import json
 from typing import Optional
@@ -10,6 +10,7 @@ from combat_coordinator import CombatCoordinator
 from rendering_coordinator import RenderingCoordinator
 from player_manager import PlayerManager
 from ui_systems import organize_inventory_into_containers
+from examination_action_system import ExaminationSystem, ExaminationInputHandler
 
 class GameManager:
     """Manages overall game state and coordinates between systems."""
@@ -26,6 +27,11 @@ class GameManager:
         self.combat_coordinator = CombatCoordinator()
         self.rendering_coordinator = RenderingCoordinator(screen)
         self.player_manager = PlayerManager()
+        
+        # Initialize examination system
+        screen_width, screen_height = screen.get_size()
+        self.examination_system = ExaminationSystem(screen_width, screen_height, FONT_FILE)
+        self.examination_input = ExaminationInputHandler(self.examination_system)
         
         # Game world state
         self.dungeon: Optional[DungeonExplorer] = None
@@ -69,10 +75,14 @@ class GameManager:
         self.input_handler.set_menu_callback('inventory', self._open_inventory)
         self.input_handler.set_menu_callback('equipment', self._open_equipment)
         self.input_handler.set_menu_callback('spells', self._open_spell_menu)
+        self.input_handler.set_menu_callback('examine', self._open_examine_mode)
         
         # Navigation callbacks for UI screens
         self.input_handler.set_navigation_callback(self._handle_navigation)
         self.input_handler.set_selection_callback(self._handle_selection)
+        
+        # Examination callback
+        self.input_handler.set_examination_callback(self._handle_examination_input)
         
         # System callbacks
         self.input_handler.set_system_callback('fullscreen', self._toggle_fullscreen)
@@ -85,7 +95,7 @@ class GameManager:
         if self.game_state == GameState.MAIN_MENU:
             return self._handle_main_menu_event(event)
         else:
-            return self.input_handler.handle_event(event, self.game_state)
+            return self.input_handler.handle_event(event, self.game_state, self.examination_system.mode)
     
     def _handle_main_menu_event(self, event: pygame.event.Event) -> Optional[str]:
         """Handle main menu events."""
@@ -130,6 +140,11 @@ class GameManager:
         # Update rendering coordinator with new screen
         self.rendering_coordinator.update_screen(self.screen)
         
+        # Update examination system screen size
+        screen_width, screen_height = self.screen.get_size()
+        self.examination_system.screen_width = screen_width
+        self.examination_system.screen_height = screen_height
+        
         # Setup player and world
         self.player = created_player
         self.player_manager.setup_player(self.player)
@@ -165,6 +180,13 @@ class GameManager:
                     self.player, self.player_pos, self.dungeon, 
                     self.combat_coordinator, self.zoom_level
                 )
+                
+                # Render examination interface if active
+                if self.examination_system.mode != ExamineMode.INACTIVE:
+                    viewport_x, viewport_y = self.rendering_coordinator.viewport_x, self.rendering_coordinator.viewport_y
+                    cell_size = self.rendering_coordinator.cell_size
+                    self.examination_system.draw(self.screen, self.player, self.dungeon, 
+                                               viewport_x, viewport_y, cell_size)
         
         elif self.game_state == GameState.INVENTORY:
             self.rendering_coordinator.render_inventory(
@@ -184,6 +206,32 @@ class GameManager:
             self.rendering_coordinator.render_spell_targeting(
                 self.player, self.player_pos, self.current_spell, self.spell_target_pos
             )
+    
+    def _handle_examination_input(self, event: pygame.event.Event, examine_mode: ExamineMode) -> Optional[str]:
+        """Handle examination system input."""
+        if not self.player or not self.dungeon:
+            return None
+        
+        result = self.examination_input.handle_event(event, self.player, self.dungeon)
+        
+        # Process examination results
+        if result and result.startswith("action_executed:"):
+            action_type = result.split(":")[1]
+            print(f"Action performed: {action_type.replace('_', ' ').title()}")
+            
+            # Update walkable positions after actions that might change the world
+            if action_type in ["pushed_boulder", "prayed", "cast_spell", "used_item"]:
+                self.walkable_positions = self.dungeon.get_walkable_positions(for_monster=False)
+        
+        return result
+    
+    def _open_examine_mode(self):
+        """Open examination mode."""
+        if self.combat_coordinator.is_in_combat():
+            return
+        if self.player:
+            self.examination_system.activate_examine_mode(self.player.x, self.player.y)
+            print("Examination mode activated. Use arrow keys to look around, ENTER to examine.")
     
     def _handle_navigation(self, screen_type: str, direction: str):
         """Handle navigation in UI screens."""
@@ -470,6 +518,11 @@ class GameManager:
         
         # Update rendering coordinator with new screen
         self.rendering_coordinator.update_screen(self.screen)
+        
+        # Update examination system screen size
+        screen_width, screen_height = self.screen.get_size()
+        self.examination_system.screen_width = screen_width
+        self.examination_system.screen_height = screen_height
     
     def _zoom_in(self):
         """Zoom in."""
@@ -481,7 +534,13 @@ class GameManager:
     
     def _handle_escape(self):
         """Handle escape key."""
-        if self.game_state == GameState.PLAYING:
+        if self.examination_system.mode != ExamineMode.INACTIVE:
+            if self.examination_system.mode == ExamineMode.ACTION_MENU:
+                self.examination_system.mode = ExamineMode.LOOKING
+            else:
+                self.examination_system.deactivate_examine_mode()
+            return None
+        elif self.game_state == GameState.PLAYING:
             if self.combat_coordinator.is_in_combat():
                 return  # Can't escape during combat
             return "quit"
