@@ -1,4 +1,4 @@
-# rendering_engine.py - All tile and dungeon rendering functions (updated)
+# rendering_engine.py - Complete enhanced version with puzzle elements
 import pygame
 from typing import List, Tuple
 from game_constants import *
@@ -43,7 +43,7 @@ def draw_spell_range_indicator(surface: pygame.Surface, player_pos: Tuple[int, i
         range_rect = (player_screen_x - range_size, player_screen_y - range_size)
         surface.blit(range_surface, range_rect)
 
-# --- Tile Drawing Functions ---
+# --- Enhanced Tile Drawing Functions ---
 def draw_tile(surface: pygame.Surface, tile_type: TileType, x: int, y: int, cell_size: int):
     left = x * cell_size
     top = y * cell_size
@@ -116,6 +116,172 @@ def draw_tile(surface: pygame.Surface, tile_type: TileType, x: int, y: int, cell
         note_size = max(2, cell_size // 8)
         note_rect = pygame.Rect(center_x - note_size//2, center_y - note_size//2, note_size, note_size)
         pygame.draw.rect(surface, COLOR_NOTE, note_rect)
+    
+    # --- PUZZLE ELEMENTS ---
+    elif tile_type == TileType.ALTAR:
+        # Draw floor base
+        pygame.draw.rect(surface, COLOR_FLOOR, (left, top, cell_size, cell_size))
+        draw_floor_grid(surface, left, top, cell_size)
+        
+        # Draw altar as a rectangular stone block
+        altar_size = int(cell_size * 0.7)
+        altar_rect = pygame.Rect(center_x - altar_size // 2, center_y - altar_size // 2, altar_size, altar_size)
+        pygame.draw.rect(surface, COLOR_ALTAR, altar_rect)
+        pygame.draw.rect(surface, COLOR_WALL, altar_rect, 2)
+        
+        # Add holy light effect
+        light_size = int(cell_size * 0.3)
+        light_rect = pygame.Rect(center_x - light_size // 2, center_y - light_size // 2, light_size, light_size)
+        pygame.draw.ellipse(surface, COLOR_HOLY_LIGHT, light_rect)
+    
+    elif tile_type == TileType.BOULDER:
+        # Draw floor base
+        pygame.draw.rect(surface, COLOR_FLOOR, (left, top, cell_size, cell_size))
+        draw_floor_grid(surface, left, top, cell_size)
+        
+        # Draw boulder as a large dark square
+        boulder_size = int(cell_size * 0.8)
+        boulder_rect = pygame.Rect(center_x - boulder_size // 2, center_y - boulder_size // 2, boulder_size, boulder_size)
+        pygame.draw.rect(surface, COLOR_BOULDER, boulder_rect)
+        pygame.draw.rect(surface, COLOR_WALL, boulder_rect, 2)
+    
+    elif tile_type in [TileType.PRESSURE_PLATE, TileType.PRESSURE_PLATE_ACTIVE]:
+        # Draw floor base
+        pygame.draw.rect(surface, COLOR_FLOOR, (left, top, cell_size, cell_size))
+        draw_floor_grid(surface, left, top, cell_size)
+        
+        # Draw pressure plate as a circular element
+        plate_radius = int(cell_size * 0.3)
+        color = COLOR_PRESSURE_PLATE_ACTIVE if tile_type == TileType.PRESSURE_PLATE_ACTIVE else COLOR_PRESSURE_PLATE
+        pygame.draw.circle(surface, color, (center_x, center_y), plate_radius)
+        pygame.draw.circle(surface, COLOR_WALL, (center_x, center_y), plate_radius, 2)
+    
+    elif tile_type in [TileType.GLYPH, TileType.GLYPH_ACTIVE]:
+        # Draw floor base
+        pygame.draw.rect(surface, COLOR_FLOOR, (left, top, cell_size, cell_size))
+        draw_floor_grid(surface, left, top, cell_size)
+        
+        # Draw glyph as a triangular pattern
+        color = COLOR_GLYPH_ACTIVE if tile_type == TileType.GLYPH_ACTIVE else COLOR_GLYPH
+        glyph_size = int(cell_size * 0.4)
+        
+        # Draw three dots in triangle formation
+        dot_radius = max(2, cell_size // 12)
+        offset = glyph_size // 2
+        
+        # Top dot
+        pygame.draw.circle(surface, color, (center_x, center_y - offset), dot_radius)
+        # Bottom left dot
+        pygame.draw.circle(surface, color, (center_x - offset, center_y + offset // 2), dot_radius)
+        # Bottom right dot
+        pygame.draw.circle(surface, color, (center_x + offset, center_y + offset // 2), dot_radius)
+        
+        # If active, add connecting lines
+        if tile_type == TileType.GLYPH_ACTIVE:
+            line_thickness = max(1, cell_size // 24)
+            pygame.draw.line(surface, color, (center_x, center_y - offset), (center_x - offset, center_y + offset // 2), line_thickness)
+            pygame.draw.line(surface, color, (center_x, center_y - offset), (center_x + offset, center_y + offset // 2), line_thickness)
+            pygame.draw.line(surface, color, (center_x - offset, center_y + offset // 2), (center_x + offset, center_y + offset // 2), line_thickness)
+    
+    elif tile_type == TileType.BARRIER:
+        # Draw floor base
+        pygame.draw.rect(surface, COLOR_FLOOR, (left, top, cell_size, cell_size))
+        draw_floor_grid(surface, left, top, cell_size)
+        
+        # Draw barrier as vertical red lines
+        line_thickness = max(2, cell_size // 12)
+        line_spacing = cell_size // 4
+        
+        for i in range(3):
+            line_x = left + line_spacing + (i * line_spacing)
+            pygame.draw.line(surface, COLOR_BARRIER, (line_x, top), (line_x, top + cell_size), line_thickness)
+    
+    elif tile_type == TileType.STAIRS_DOWN:
+        # Draw floor base
+        pygame.draw.rect(surface, COLOR_FLOOR, (left, top, cell_size, cell_size))
+        draw_floor_grid(surface, left, top, cell_size)
+        
+        # Draw stairs down as a square with diagonal lines
+        stairs_size = int(cell_size * 0.6)
+        stairs_rect = pygame.Rect(center_x - stairs_size // 2, center_y - stairs_size // 2, stairs_size, stairs_size)
+        pygame.draw.rect(surface, COLOR_WALL, stairs_rect)
+        pygame.draw.rect(surface, COLOR_WHITE, stairs_rect, 2)
+        
+        # Add downward arrow pattern
+        arrow_size = stairs_size // 3
+        arrow_points = [
+            (center_x, center_y + arrow_size // 2),
+            (center_x - arrow_size // 2, center_y - arrow_size // 2),
+            (center_x + arrow_size // 2, center_y - arrow_size // 2)
+        ]
+        pygame.draw.polygon(surface, COLOR_WHITE, arrow_points)
+    
+    elif tile_type == TileType.CHEST:
+        # Draw floor base
+        pygame.draw.rect(surface, COLOR_FLOOR, (left, top, cell_size, cell_size))
+        draw_floor_grid(surface, left, top, cell_size)
+        
+        # Draw chest as a brown rectangle
+        chest_width = int(cell_size * 0.7)
+        chest_height = int(cell_size * 0.5)
+        chest_rect = pygame.Rect(center_x - chest_width // 2, center_y - chest_height // 2, chest_width, chest_height)
+        pygame.draw.rect(surface, COLOR_CHEST, chest_rect)
+        pygame.draw.rect(surface, COLOR_WALL, chest_rect, 2)
+        
+        # Add lock/handle detail
+        handle_size = max(2, cell_size // 16)
+        pygame.draw.circle(surface, COLOR_WALL, (center_x, center_y), handle_size)
+
+def draw_puzzle_overlays(surface: pygame.Surface, dungeon: DungeonExplorer, viewport_x: int, viewport_y: int, 
+                        cell_size: int, font: pygame.font.Font):
+    """Draw puzzle-specific overlays like ASCII symbols"""
+    for puzzle in dungeon.puzzle_manager.puzzles.values():
+        # Only draw for revealed rooms
+        if puzzle.room_id not in dungeon.revealed_rooms:
+            continue
+        
+        # Draw ASCII symbols for puzzle elements
+        for element_list in puzzle.elements.values():
+            for element in element_list:
+                if not dungeon.is_revealed(element.x, element.y):
+                    continue
+                
+                screen_x = (element.x - viewport_x) * cell_size + (cell_size // 2)
+                screen_y = (element.y - viewport_y) * cell_size + (cell_size // 2)
+                
+                # Skip if off-screen
+                if (screen_x < -cell_size or screen_x > surface.get_width() + cell_size or
+                    screen_y < -cell_size or screen_y > surface.get_height() + cell_size):
+                    continue
+                
+                # Get appropriate symbol and color
+                symbol = ""
+                color = COLOR_WHITE
+                
+                if element.element_type == "altar":
+                    symbol = UI_ICONS["ALTAR"]
+                    color = COLOR_ALTAR
+                elif element.element_type == "boulder":
+                    symbol = UI_ICONS["BOULDER"]
+                    color = COLOR_BOULDER
+                elif element.element_type == "pressure_plate":
+                    symbol = UI_ICONS["PRESSURE_PLATE"]
+                    color = COLOR_PRESSURE_PLATE_ACTIVE if element.active else COLOR_PRESSURE_PLATE
+                elif element.element_type == "glyph":
+                    symbol = UI_ICONS["GLYPH"]
+                    color = COLOR_GLYPH_ACTIVE if element.active else COLOR_GLYPH
+                elif element.element_type == "barrier" and element.active:
+                    symbol = UI_ICONS["BARRIER"]
+                    color = COLOR_BARRIER
+                elif element.element_type == "chest":
+                    symbol = UI_ICONS["CHEST"]
+                    color = COLOR_CHEST
+                
+                if symbol:
+                    # Render the symbol
+                    symbol_surf = font.render(symbol, True, color)
+                    symbol_rect = symbol_surf.get_rect(center=(screen_x, screen_y))
+                    surface.blit(symbol_surf, symbol_rect)
 
 def draw_floor_grid(surface: pygame.Surface, left: int, top: int, cell_size: int):
     """Draw a grid pattern that aligns with character movement"""

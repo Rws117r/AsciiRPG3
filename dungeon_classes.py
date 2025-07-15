@@ -1,8 +1,12 @@
-# dungeon_classes.py - Dungeon-related classes and logic
+# dungeon_classes.py - Fixed version with automatic boulder pushing
 import random
-from typing import List, Tuple, Dict, Set
+from typing import List, Tuple, Dict, Set, Optional
 from dataclasses import dataclass
 from game_constants import TileType
+from puzzle_system import (
+    PuzzleManager, generate_boulder_puzzle, should_generate_puzzle,
+    Boulder, PressurePlate, Glyph, Barrier, Altar, Chest
+)
 
 # Import the new monster system
 from monster_system import MonsterInstance, spawn_random_monster, get_monster_database
@@ -61,10 +65,14 @@ class DungeonExplorer:
         self.water_tiles: List[WaterTile] = []
         self.tiles: Dict[Tuple[int, int], TileType] = {}
         self.revealed_rooms: Set[int] = set()
-        self.monsters: List[MonsterInstance] = []  # Changed to use MonsterInstance
+        self.monsters: List[MonsterInstance] = []
+        
+        # Puzzle system
+        self.puzzle_manager = PuzzleManager()
         
         self._parse_data(dungeon_data)
         self._generate_tiles()
+        self._generate_puzzles()
         self._spawn_monsters()
         
         # Reveal the room at the starting position
@@ -185,9 +193,46 @@ class DungeonExplorer:
         for note in self.notes:
             if (note.x, note.y) in self.tiles:
                 self.tiles[(note.x, note.y)] = TileType.NOTE
+    
+    def _generate_puzzles(self):
+        """Generate puzzles for eligible rooms"""
+        for room in self.rooms.values():
+            if should_generate_puzzle(room):
+                room_cells = room.get_cells()
+                puzzle = generate_boulder_puzzle(room, room_cells)
+                
+                if puzzle.elements:  # Only add if puzzle was actually generated
+                    self.puzzle_manager.add_puzzle(puzzle)
+                    self._place_puzzle_tiles(puzzle)
+    
+    def _place_puzzle_tiles(self, puzzle):
+        """Place puzzle element tiles in the dungeon"""
+        # Place altar
+        for altar in puzzle.elements["altars"]:
+            self.tiles[(altar.x, altar.y)] = TileType.ALTAR
+        
+        # Place boulders
+        for boulder in puzzle.elements["boulders"]:
+            self.tiles[(boulder.x, boulder.y)] = TileType.BOULDER
+        
+        # Place pressure plates
+        for plate in puzzle.elements["pressure_plates"]:
+            self.tiles[(plate.x, plate.y)] = TileType.PRESSURE_PLATE
+        
+        # Place glyphs
+        for glyph in puzzle.elements["glyphs"]:
+            self.tiles[(glyph.x, glyph.y)] = TileType.GLYPH
+        
+        # Place barriers
+        for barrier in puzzle.elements["barriers"]:
+            self.tiles[(barrier.x, barrier.y)] = TileType.BARRIER
+        
+        # Place chests
+        for chest in puzzle.elements["chests"]:
+            self.tiles[(chest.x, chest.y)] = TileType.CHEST
 
     def _spawn_monsters(self):
-        """Spawns monsters in rooms based on a random chance, using JSON monster data."""
+        """Spawns monsters in rooms based on a random chance, avoiding puzzle rooms."""
         # Initialize the monster database
         monster_db = get_monster_database()
         print(f"Monster database loaded with {len(monster_db.list_monsters())} monster types:")
@@ -202,20 +247,21 @@ class DungeonExplorer:
                 break
 
         door_locations = {(d.x, d.y) for d in self.doors}
+        puzzle_rooms = set(self.puzzle_manager.puzzles.keys())
 
         for room_id, room in self.rooms.items():
-            # Don't spawn monsters in the starting room
-            if room_id == start_room_id:
+            # Don't spawn monsters in the starting room or puzzle rooms
+            if room_id == start_room_id or room_id in puzzle_rooms:
                 continue
 
-            # 50% chance to spawn a monster in each room
+            # 50% chance to spawn a monster in each non-puzzle room
             if random.randint(1, 6) <= 3:
                 # Spawn a monster in a random valid cell of the room
                 valid_cells = [cell for cell in room.get_cells() if cell not in door_locations]
                 if valid_cells:
                     x, y = random.choice(valid_cells)
                     
-                    # Determine monster level based on distance from start (simple difficulty scaling)
+                    # Determine monster level based on distance from start
                     distance_from_start = max(abs(x - start_pos[0]), abs(y - start_pos[1]))
                     if distance_from_start < 5:
                         level_range = (1, 1)  # Easy monsters near start
@@ -266,16 +312,28 @@ class DungeonExplorer:
                     if neighbor_id not in self.revealed_rooms:
                         queue.append(neighbor_id)
     
-    def get_walkable_positions(self, for_monster: bool = False) -> Set[Tuple[int, int]]:
-        """Determines the set of tiles a character or monster can move to."""
+    def get_walkable_positions(self, for_boulders: bool = False) -> Set[Tuple[int, int]]:
+        """Determines the set of tiles a character or boulder can move to."""
         walkable = set()
         
-        # Define which tiles are generally passable
-        passable_tiles = {
-            TileType.FLOOR, TileType.DOOR_OPEN, TileType.NOTE,
-            TileType.STAIRS_HORIZONTAL, TileType.STAIRS_VERTICAL,
-            TileType.DOOR_HORIZONTAL, TileType.DOOR_VERTICAL
-        }
+        if for_boulders:
+            # Boulders can move onto these tiles
+            passable_tiles = {
+                TileType.FLOOR, 
+                TileType.PRESSURE_PLATE, 
+                TileType.PRESSURE_PLATE_ACTIVE,
+                TileType.GLYPH, 
+                TileType.GLYPH_ACTIVE
+            }
+        else:
+            # Players/monsters can move onto these tiles
+            passable_tiles = {
+                TileType.FLOOR, TileType.DOOR_OPEN, TileType.NOTE,
+                TileType.STAIRS_HORIZONTAL, TileType.STAIRS_VERTICAL,
+                TileType.DOOR_HORIZONTAL, TileType.DOOR_VERTICAL,
+                TileType.PRESSURE_PLATE, TileType.PRESSURE_PLATE_ACTIVE,
+                TileType.GLYPH, TileType.GLYPH_ACTIVE
+            }
         
         for pos, tile_type in self.tiles.items():
             # A tile is walkable if its type is passable AND it's in a revealed area.
@@ -300,6 +358,115 @@ class DungeonExplorer:
                     
                     return True
         return False
+    
+    def attempt_move_with_boulder_pushing(self, player_pos: Tuple[int, int], 
+                                         next_pos: Tuple[int, int]) -> Tuple[bool, Tuple[int, int]]:
+        """
+        Attempt to move to next_pos, automatically pushing boulders if necessary.
+        Returns (success, final_player_position)
+        """
+        # Check if there's a boulder at the target position
+        boulder = self.puzzle_manager.get_element_at_position(next_pos[0], next_pos[1])
+        
+        if boulder and isinstance(boulder, Boulder):
+            # There's a boulder - try to push it
+            push_direction = (next_pos[0] - player_pos[0], next_pos[1] - player_pos[1])
+            boulder_dest = (boulder.x + push_direction[0], boulder.y + push_direction[1])
+            
+            # Check if boulder can move to its destination
+            boulder_walkable = self.get_walkable_positions(for_boulders=True)
+            
+            # Make sure no other boulder is at the destination
+            existing_element = self.puzzle_manager.get_element_at_position(boulder_dest[0], boulder_dest[1])
+            boulder_dest_blocked = (existing_element is not None and 
+                                   isinstance(existing_element, Boulder))
+            
+            if (boulder_dest in boulder_walkable and not boulder_dest_blocked):
+                # Push the boulder and move player to boulder's old position
+                if self.puzzle_manager.move_boulder(boulder, boulder_dest[0], boulder_dest[1], boulder_walkable):
+                    # Update tile positions
+                    self.tiles[(boulder.x, boulder.y)] = TileType.BOULDER  # Boulder's new position
+                    
+                    # Update the original boulder position based on underlying tile
+                    original_tile = self._get_underlying_tile_type(next_pos[0], next_pos[1])
+                    self.tiles[(next_pos[0], next_pos[1])] = original_tile
+                    
+                    # Update puzzle state
+                    self._update_puzzle_tiles()
+                    
+                    print(f"Pushed boulder from {next_pos} to {boulder_dest}")
+                    return True, next_pos  # Player moves to boulder's old position
+                else:
+                    print("Can't push boulder - destination blocked")
+                    return False, player_pos
+            else:
+                print("Can't push boulder - way is blocked")
+                return False, player_pos
+        else:
+            # No boulder - check if position is walkable for player
+            player_walkable = self.get_walkable_positions(for_boulders=False)
+            if next_pos in player_walkable:
+                # Check if there's a monster at the destination
+                monster_at_dest = None
+                for monster in self.monsters:
+                    if (monster.x, monster.y) == next_pos:
+                        monster_at_dest = monster
+                        break
+                
+                if monster_at_dest:
+                    # There's a monster - this should trigger combat, not movement
+                    return False, player_pos
+                else:
+                    # Clear path - player can move
+                    return True, next_pos
+            else:
+                # Position not walkable
+                return False, player_pos
+    
+    def _get_underlying_tile_type(self, x: int, y: int) -> TileType:
+        """Get the underlying tile type for a position (what it should be without puzzle elements)"""
+        # Check if this position has a pressure plate
+        for puzzle in self.puzzle_manager.puzzles.values():
+            for plate in puzzle.elements["pressure_plates"]:
+                if plate.x == x and plate.y == y:
+                    return TileType.PRESSURE_PLATE_ACTIVE if plate.active else TileType.PRESSURE_PLATE
+        
+        # Default to floor if no special underlying tile
+        return TileType.FLOOR
+    
+    def handle_player_interaction(self, player, x: int, y: int) -> bool:
+        """Handle player interaction with dungeon elements"""
+        # Check for puzzle element interaction (chests, altars, etc.)
+        if self.puzzle_manager.interact_with_element(player, x, y):
+            return True
+        
+        # Regular door opening
+        return self.open_door_at_position(x, y)
+    
+    def _update_puzzle_tiles(self):
+        """Update tile types based on current puzzle states"""
+        for puzzle in self.puzzle_manager.puzzles.values():
+            # Update pressure plates
+            for plate in puzzle.elements["pressure_plates"]:
+                if plate.active:
+                    self.tiles[(plate.x, plate.y)] = TileType.PRESSURE_PLATE_ACTIVE
+                else:
+                    self.tiles[(plate.x, plate.y)] = TileType.PRESSURE_PLATE
+            
+            # Update glyphs
+            for glyph in puzzle.elements["glyphs"]:
+                if glyph.active:
+                    self.tiles[(glyph.x, glyph.y)] = TileType.GLYPH_ACTIVE
+                else:
+                    self.tiles[(glyph.x, glyph.y)] = TileType.GLYPH
+            
+            # Update barriers
+            for barrier in puzzle.elements["barriers"]:
+                if barrier.active:
+                    self.tiles[(barrier.x, barrier.y)] = TileType.BARRIER
+                else:
+                    # Remove barrier - make it walkable floor
+                    self.tiles[(barrier.x, barrier.y)] = TileType.FLOOR
     
     def get_starting_position(self) -> Tuple[int, int]:
         return (0, 0)

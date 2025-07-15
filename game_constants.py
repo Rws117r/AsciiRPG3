@@ -1,4 +1,4 @@
-# game_constants.py - All constants and enums
+# game_constants.py - Enhanced with puzzle elements
 from enum import Enum
 from typing import Dict, List
 
@@ -43,6 +43,18 @@ COLOR_EQUIPPED_ITEM = (150, 100, 50)
 COLOR_GREEN = (100, 255, 100)
 COLOR_RED = (255, 100, 100)
 
+# Puzzle-specific colors
+COLOR_ALTAR = (255, 255, 255)
+COLOR_HOLY_LIGHT = (255, 255, 100)
+COLOR_BOULDER = (139, 69, 19)
+COLOR_PRESSURE_PLATE = (100, 100, 150)
+COLOR_PRESSURE_PLATE_ACTIVE = (150, 150, 255)
+COLOR_GLYPH = (100, 255, 100)
+COLOR_GLYPH_ACTIVE = (0, 255, 0)
+COLOR_BARRIER = (255, 0, 0)
+COLOR_CHEST = (160, 82, 45)
+COLOR_TRAP_INDICATOR = (255, 165, 0)
+
 # --- UI Icons ---
 UI_ICONS = {
     "DAGGER": "\U0001F5E1",
@@ -51,7 +63,16 @@ UI_ICONS = {
     "SPELL_CURSOR": "☄",
     "HEART": "♥",
     "SUN": "☼",
-    "GOLD": "¤"
+    "GOLD": "¤",
+    # Puzzle elements
+    "ALTAR": "Π",
+    "HOLY_LIGHT": "⊕",
+    "BOULDER": "■",
+    "PRESSURE_PLATE": "◉",
+    "GLYPH": "∴",
+    "BARRIER": "≡",
+    "STAIRS_DOWN": "∇",
+    "CHEST": "⊠"
 }
 
 # --- Game States ---
@@ -77,3 +98,29 @@ class TileType(Enum):
     NOTE = 5
     STAIRS_HORIZONTAL = 6
     STAIRS_VERTICAL = 7
+    # Puzzle elements
+    ALTAR = 10
+    HOLY_LIGHT = 11
+    BOULDER = 12
+    PRESSURE_PLATE = 13
+    PRESSURE_PLATE_ACTIVE = 14
+    GLYPH = 15
+    GLYPH_ACTIVE = 16
+    BARRIER = 17
+    STAIRS_DOWN = 18
+    CHEST = 19
+
+# --- Puzzle Types ---
+class PuzzleType(Enum):
+    BOULDER_PRESSURE_PLATE = 1
+    RUNE_SEQUENCE = 2
+    SWITCH_COMBINATION = 3
+    RIDDLE_DOOR = 4
+
+# --- Puzzle States ---
+class PuzzleState(Enum):
+    INACTIVE = 0
+    ACTIVE = 1
+    SOLVING = 2
+    SOLVED = 3
+    FAILED = 4
