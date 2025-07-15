@@ -11,6 +11,7 @@ from ecs_systems import *
 from ecs_entities import EntityBuilder, create_test_world
 from ecs_render_coordinator import ECSRenderCoordinator
 from game_constants import GameState, TileType
+from ecs_entities import EntityBuilder, MonsterTemplates, create_test_world  # Added MonsterTemplates import
 
 class ECSGameManager:
     """ECS-based game manager that coordinates all game systems - Phase 4 Update"""
@@ -175,8 +176,8 @@ class ECSGameManager:
         
         # Add some status effects for testing
         self.world.add_component(goblin1, OnFireComponent(duration_remaining=10, fire_damage=1))
-        self.world.add_component(rat, PoisonedComponent(duration_remaining=5, damage_per_turn=1))
-        self.world.add_component(skeleton, BlessedComponent(duration_remaining=20, bonus_amount=2))
+        self.world.add_component(rat, PoisonedComponent("poisoned", duration_remaining=5, damage_per_turn=1))
+        self.world.add_component(skeleton, BlessedComponent("blessed", duration_remaining=20, bonus_amount=2))
         
         # Damage one of the goblins to test health bars
         goblin1_health = self.world.get_component(goblin1, HealthComponent)
