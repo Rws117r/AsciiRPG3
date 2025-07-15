@@ -435,8 +435,11 @@ class OnFireComponent(StatusEffectComponent):
     fire_damage: int = 1
     spread_chance: float = 0.1
     
-    def __post_init__(self):
-        self.effect_type = "on_fire"
+    def __init__(self, duration_remaining: int = 5, fire_damage: int = 1, spread_chance: float = 0.1, 
+                 intensity: int = 1, source: Optional['EntityID'] = None):
+        super().__init__("on_fire", duration_remaining, intensity, source)
+        self.fire_damage = fire_damage
+        self.spread_chance = spread_chance
 
 @dataclass
 class WetComponent(StatusEffectComponent):

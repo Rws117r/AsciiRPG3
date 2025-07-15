@@ -521,4 +521,4 @@ def create_test_world() -> World:
     boulder = EntityBuilder.create_boulder(world, 9, 5)
     plate = EntityBuilder.create_pressure_plate(world, 11, 5)
     
-    return world"
+    return world
