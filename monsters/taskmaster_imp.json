@@ -2,13 +2,13 @@
   "name": "Taskmaster Imp",
   "description": "A diminutive, fussy fiend that delights in creating convoluted plans and tracking progress with infernal charts. It pesters and prods its victims into endless, pointless activity.",
   "ascii_char": "I",
-  "ac": 12,
+  "ac": 0,
   "ac_details": "natural armor",
-  "hp": 5,
+  "hp": 0,
   "attacks": [
     {
       "name": "Pointy Prod",
-      "details": "+2 (1d4 piercing)",
+      "details": "+2 (1d1 piercing)",
       "count": 1
     }
   ],
