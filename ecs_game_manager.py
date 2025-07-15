@@ -35,7 +35,61 @@ class ECSGameManager:
         
         print("🔧 ECS Game Manager initialized")
         print(f"   World created with {len(self.world.systems)} systems")
-    
+    # Add these methods to ECSGameManager class
+
+    def _setup_player_systems(self):
+        """Setup player-specific systems"""
+        self.input_system = PlayerInputSystem()
+        self.experience_system = ExperienceSystem()
+        
+        self.world.add_system(self.input_system)
+        self.world.add_system(self.experience_system)
+
+    def _create_player_from_character_creation(self):
+        """Create player from character creation"""
+        # For now, create a test player
+        # Later this will integrate with character creation
+        self.player_entity = EntityBuilder.create_player_from_character_data(
+            self.world, {
+                'name': 'ECS Hero',
+                'title': 'Test Adventurer',
+                'character_class': 'Fighter',
+                'race': 'Human',
+                'alignment': 'Neutral',
+                'x': 10,
+                'y': 10,
+                'hp': 12,
+                'max_hp': 12,
+                'ac': 11,
+                'strength': 15,
+                'dexterity': 13,
+                'constitution': 14,
+                'intelligence': 10,
+                'wisdom': 12,
+                'charisma': 8,
+                'level': 1,
+                'xp': 0,
+                'gold': 50.0,
+                'max_gear_slots': 15
+            }
+        )
+        
+        # Setup input handler
+        self.input_handler = ECSInputHandler(self.world)
+        self.input_handler.set_player_entity(self.player_entity)
+
+    def handle_event(self, event: pygame.event.Event) -> bool:
+        """Handle events with ECS input system"""
+        if event.type == pygame.QUIT:
+            return False
+        
+        if self.game_state == GameState.MAIN_MENU:
+            return self._handle_main_menu_event(event)
+        elif self.game_state == GameState.PLAYING:
+            if hasattr(self, 'input_handler'):
+                return self.input_handler.handle_event(event)
+        
+        return True
     def _setup_core_systems(self):
         """Initialize core ECS systems"""
         # Create and add systems
@@ -83,11 +137,12 @@ class ECSGameManager:
         print(f"   ✓ Game state: {self.game_state.name}")
     
     def _create_test_game_world(self):
-        """Create a test game world for Phase 2"""
-        # Create a simple test world with player and some entities
-        self.player_entity = EntityBuilder.create_player(
-            self.world, "ECS Hero", 10, 10, "Fighter", "Human"
-        )
+        """Create a test game world for Phase 3"""
+        # Setup player systems first
+        self._setup_player_systems()
+        
+        # Create player
+        self._create_player_from_character_creation()
         
         # Create some test entities around the player
         EntityBuilder.create_goblin(self.world, 12, 10, room_id=1)
@@ -100,7 +155,7 @@ class ECSGameManager:
         player_pos = self.world.get_component(self.player_entity, PositionComponent)
         if player_pos:
             self.render_system.set_camera(
-                player_pos.x - 10,  # Center player in viewport
+                player_pos.x - 10,
                 player_pos.y - 7
             )
     

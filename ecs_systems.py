@@ -170,6 +170,95 @@ class MovementSystem(System):
         
         return False
 
+# Add these new systems to ecs_systems.py
+
+class PlayerInputSystem(System):
+    """Processes player input events"""
+    
+    def update(self, world: World, dt: float):
+        """Process player input events"""
+        for event in world.events:
+            if isinstance(event, WaitEvent):
+                self._process_wait(world, event)
+            elif isinstance(event, UIEvent):
+                self._process_ui_request(world, event)
+    
+    def _process_wait(self, world: World, event: WaitEvent):
+        """Process wait/defend action"""
+        # For now, just add a message
+        name_comp = world.get_component(event.entity, NameComponent)
+        if name_comp:
+            print(f"{name_comp.name} waits and defends.")
+        
+        # Could add defense bonus or other effects here
+    
+    def _process_ui_request(self, world: World, event: UIEvent):
+        """Process UI screen requests"""
+        # This would trigger UI state changes in the game manager
+        # For now, just log the request
+        name_comp = world.get_component(event.entity, NameComponent)
+        name = name_comp.name if name_comp else "Unknown"
+        print(f"{name} wants to open {event.ui_type} screen")
+
+class ExperienceSystem(System):
+    """Handles experience gain and leveling up"""
+    
+    def update(self, world: World, dt: float):
+        """Process experience events"""
+        for event in world.events:
+            if isinstance(event, ExperienceGainEvent):
+                self._process_experience_gain(world, event)
+    
+    def _process_experience_gain(self, world: World, event: 'ExperienceGainEvent'):
+        """Process experience gain"""
+        exp_comp = world.get_component(event.entity, ExperienceComponent)
+        if not exp_comp:
+            return
+        
+        exp_comp.current_xp += event.amount
+        
+        # Check for level up
+        while exp_comp.can_level_up():
+            self._level_up_entity(world, event.entity, exp_comp)
+    
+    def _level_up_entity(self, world: World, entity: EntityID, exp_comp: ExperienceComponent):
+        """Level up an entity"""
+        # Deduct XP for level
+        exp_comp.current_xp -= exp_comp.xp_to_next_level()
+        exp_comp.level += 1
+        
+        # Increase health
+        health_comp = world.get_component(entity, HealthComponent)
+        class_comp = world.get_component(entity, ClassComponent)
+        stats_comp = world.get_component(entity, StatsComponent)
+        
+        if health_comp and class_comp and stats_comp:
+            # Calculate HP gain
+            import random
+            con_mod = stats_comp.get_modifier('constitution')
+            
+            if class_comp.character_class == "Fighter":
+                hp_gain = random.randint(1, 8) + con_mod
+            elif class_comp.character_class == "Priest":
+                hp_gain = random.randint(1, 6) + con_mod
+            else:  # Thief, Wizard
+                hp_gain = random.randint(1, 4) + con_mod
+            
+            hp_gain = max(1, hp_gain)
+            health_comp.max_hp += hp_gain
+            health_comp.current_hp += hp_gain
+            
+            # Announce level up
+            name_comp = world.get_component(entity, NameComponent)
+            name = name_comp.name if name_comp else "Unknown"
+            print(f"{name} reached level {exp_comp.level}! HP increased by {hp_gain}!")
+
+# Add new event types
+@dataclass
+class ExperienceGainEvent:
+    """Entity gains experience"""
+    entity: EntityID
+    amount: int
 class HealthSystem(System):
     """Manages entity health and death"""
     

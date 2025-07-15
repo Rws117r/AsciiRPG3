@@ -1,4 +1,4 @@
-# ecs_components.py - Component definitions for the ECS system
+# ecs_components.py - Component definitions for the ECS system (Phase 3 Update)
 
 from dataclasses import dataclass, field
 from typing import List, Dict, Set, Optional, Tuple, Any
@@ -290,6 +290,38 @@ class EquipmentSlotsComponent(Component):
             self.slots[slot] = None
             return old_item
         return None
+
+# =============================================================================
+# PLAYER-SPECIFIC COMPONENTS (PHASE 3)
+# =============================================================================
+
+@dataclass
+class ExperienceComponent(Component):
+    """Tracks experience and level"""
+    current_xp: int = 0
+    level: int = 1
+    
+    def xp_to_next_level(self) -> int:
+        return self.level * 100  # Simple formula
+    
+    def can_level_up(self) -> bool:
+        return self.current_xp >= self.xp_to_next_level()
+
+@dataclass
+class ClassComponent(Component):
+    """Character class information"""
+    character_class: str = "Fighter"  # Fighter, Priest, Thief, Wizard
+    race: str = "Human"
+    alignment: str = "Neutral"
+    background: str = ""
+
+@dataclass
+class SpellcastingComponent(Component):
+    """Entity can cast spells"""
+    known_spells: List[str] = field(default_factory=list)
+    spell_slots: Dict[int, int] = field(default_factory=dict)  # tier -> count
+    mana_current: int = 0
+    mana_max: int = 0
 
 # =============================================================================
 # COMBAT COMPONENTS

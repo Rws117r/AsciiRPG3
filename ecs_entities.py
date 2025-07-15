@@ -6,48 +6,111 @@ import random
 from ecs_core import World, EntityID
 from ecs_components import *
 
-class EntityBuilder:
-    """Factory class for creating common entity types"""
-    
+    # Add this enhanced method to EntityBuilder class in ecs_entities.py
+
     @staticmethod
-    def create_player(world: World, name: str, x: int, y: int, 
-                     character_class: str = "Fighter", race: str = "Human") -> EntityID:
-        """Create a player character entity"""
+    def create_player_from_character_data(world: World, character_data: dict) -> EntityID:
+        """Create a complete player entity from character creation data"""
         player = world.create_entity()
+        
+        # Extract data from character_data dict
+        name = character_data.get('name', 'Hero')
+        x = character_data.get('x', 0)
+        y = character_data.get('y', 0)
+        character_class = character_data.get('character_class', 'Fighter')
+        race = character_data.get('race', 'Human')
+        alignment = character_data.get('alignment', 'Neutral')
+        level = character_data.get('level', 1)
+        
+        # Stats
+        stats = {
+            'strength': character_data.get('strength', 10),
+            'dexterity': character_data.get('dexterity', 10),
+            'constitution': character_data.get('constitution', 10),
+            'intelligence': character_data.get('intelligence', 10),
+            'wisdom': character_data.get('wisdom', 10),
+            'charisma': character_data.get('charisma', 10)
+        }
         
         # Core components
         world.add_component(player, PositionComponent(x, y))
         world.add_component(player, RenderableComponent('@', (255, 64, 64), 10))
-        world.add_component(player, NameComponent(name, "Adventurer"))
-        world.add_component(player, HealthComponent(20, 20))
+        world.add_component(player, NameComponent(name, character_data.get('title', 'Adventurer')))
         
-        # Character stats based on class
-        stats = EntityBuilder._get_class_stats(character_class)
+        # Health (based on class and constitution)
+        base_hp = character_data.get('hp', 10)
+        max_hp = character_data.get('max_hp', base_hp)
+        world.add_component(player, HealthComponent(base_hp, max_hp))
+        
+        # Stats
         world.add_component(player, StatsComponent(**stats))
         
-        # Player-specific components
+        # Player-specific
         world.add_component(player, PlayerControlledComponent())
-        world.add_component(player, MovementComponent(speed=1, can_move_diagonally=True))
-        world.add_component(player, InventoryComponent([], 20, 100.0))  # 20 slots, 100 gold
-        world.add_component(player, EquipmentSlotsComponent())
-        world.add_component(player, VisionComponent(vision_range=20))
+        world.add_component(player, ClassComponent(character_class, race, alignment))
+        world.add_component(player, ExperienceComponent(
+            character_data.get('xp', 0), 
+            level
+        ))
+        
+        # Movement and interaction
+        world.add_component(player, MovementComponent(speed=1))
         world.add_component(player, TurnOrderComponent())
         
+        # Inventory and equipment
+        max_slots = character_data.get('max_gear_slots', 10)
+        gold = character_data.get('gold', 0.0)
+        world.add_component(player, InventoryComponent([], max_slots, gold))
+        world.add_component(player, EquipmentSlotsComponent())
+        
+        # Vision and interaction
+        world.add_component(player, VisionComponent(vision_range=20))
+        
         # Combat stats
-        world.add_component(player, CombatStatsComponent(
-            armor_class=10,
-            initiative_bonus=stats['dexterity'] - 10,
-            attack_bonus=0,
-            damage_bonus=0
-        ))
+        ac = character_data.get('ac', 10)
+        world.add_component(player, CombatStatsComponent(armor_class=ac))
+        
+        # Spellcasting (if applicable)
+        if character_class in ['Priest', 'Wizard']:
+            starting_spells = character_data.get('starting_spells', [])
+            world.add_component(player, SpellcastingComponent(known_spells=starting_spells))
         
         # Examination
         world.add_component(player, ExaminableComponent(
             f"This is {name}, a brave adventurer.",
-            f"{name} looks determined and ready for adventure. Their {race.lower()} heritage and {character_class.lower()} training are evident in their bearing."
+            f"{name} looks determined and ready for adventure."
         ))
         
         return player
+
+    @staticmethod
+    def convert_legacy_player_to_ecs(world: World, legacy_player, x: int, y: int) -> EntityID:
+        """Convert old Player object to ECS entity"""
+        character_data = {
+            'name': legacy_player.name,
+            'title': legacy_player.title,
+            'x': x,
+            'y': y,
+            'character_class': legacy_player.character_class,
+            'race': legacy_player.race,
+            'alignment': legacy_player.alignment,
+            'level': legacy_player.level,
+            'hp': legacy_player.hp,
+            'max_hp': legacy_player.max_hp,
+            'ac': legacy_player.ac,
+            'xp': legacy_player.xp,
+            'strength': legacy_player.strength,
+            'dexterity': legacy_player.dexterity,
+            'constitution': legacy_player.constitution,
+            'intelligence': legacy_player.intelligence,
+            'wisdom': legacy_player.wisdom,
+            'charisma': legacy_player.charisma,
+            'gold': legacy_player.gold,
+            'max_gear_slots': legacy_player.max_gear_slots,
+            'starting_spells': getattr(legacy_player, 'starting_spells', [])
+        }
+        
+        return EntityBuilder.create_player_from_character_data(world, character_data)
     
     @staticmethod
     def create_goblin(world: World, x: int, y: int, room_id: int = -1) -> EntityID:
