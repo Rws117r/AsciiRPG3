@@ -517,3 +517,89 @@ FEATURE_FLAGS = {
     'VOICE_COMMANDS': False,    # Future feature
     'VR_SUPPORT': False         # Future feature
 }
+# Add these constants to your existing game_constants.py file
+
+# =============================================================================
+# ECS SYSTEM CONSTANTS - Phase 2
+# =============================================================================
+
+# ECS Update frequencies (in Hz)
+ECS_UPDATE_FREQUENCY = 60
+ECS_PHYSICS_FREQUENCY = 60
+ECS_AI_FREQUENCY = 30  # AI systems can run slower
+
+# ECS Component limits
+MAX_ENTITIES_PER_WORLD = 10000
+MAX_COMPONENTS_PER_ENTITY = 32
+ECS_CACHE_SIZE = 256
+
+# ECS System priorities (lower numbers = higher priority)
+SYSTEM_PRIORITY = {
+    'InputSystem': 10,
+    'MovementSystem': 20,
+    'PhysicsSystem': 30,
+    'AISystem': 40,
+    'CombatSystem': 50,
+    'StatusEffectSystem': 60,
+    'InteractionSystem': 70,
+    'RenderSystem': 80,
+    'UISystem': 90,
+    'AudioSystem': 100
+}
+
+# ECS Event types
+class ECSEventType(Enum):
+    # Core events
+    ENTITY_CREATED = "entity_created"
+    ENTITY_DESTROYED = "entity_destroyed"
+    COMPONENT_ADDED = "component_added"
+    COMPONENT_REMOVED = "component_removed"
+    
+    # Game events
+    PLAYER_MOVED = "player_moved"
+    ENTITY_DAMAGED = "entity_damaged"
+    ENTITY_HEALED = "entity_healed"
+    ENTITY_DIED = "entity_died"
+    
+    # Interaction events
+    ITEM_PICKED_UP = "item_picked_up"
+    ITEM_DROPPED = "item_dropped"
+    DOOR_OPENED = "door_opened"
+    DOOR_CLOSED = "door_closed"
+    
+    # Combat events
+    ATTACK_INITIATED = "attack_initiated"
+    ATTACK_HIT = "attack_hit"
+    ATTACK_MISSED = "attack_missed"
+    SPELL_CAST = "spell_cast"
+
+# ECS Performance settings
+ECS_PERFORMANCE = {
+    'MAX_EVENTS_PER_FRAME': 100,
+    'MAX_QUERIES_PER_FRAME': 1000,
+    'ENABLE_PROFILING': False,
+    'LOG_SLOW_SYSTEMS': True,
+    'SLOW_SYSTEM_THRESHOLD_MS': 16.0  # Systems taking longer than 16ms
+}
+
+# ECS Debug settings
+ECS_DEBUG = {
+    'SHOW_ENTITY_IDS': False,
+    'SHOW_COMPONENT_COUNTS': False,
+    'SHOW_SYSTEM_PERFORMANCE': False,
+    'LOG_EVENTS': False,
+    'HIGHLIGHT_ACTIVE_ENTITIES': False
+}
+
+# ECS Rendering constants
+ECS_RENDER = {
+    'DEFAULT_LAYER': 0,
+    'FLOOR_LAYER': 0,
+    'ITEM_LAYER': 1,
+    'CREATURE_LAYER': 5,
+    'EFFECT_LAYER': 8,
+    'UI_LAYER': 10,
+    'DEBUG_LAYER': 15
+}
+
+print("✅ ECS constants loaded for Phase 2")

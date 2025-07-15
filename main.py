@@ -1,25 +1,33 @@
-# main.py - Main entry point and game loop
+# main.py - Updated for ECS Phase 2
+
 import pygame
 import sys
-from game_manager import GameManager
-from game_constants import *
+from ecs_game_manager import ECSGameManager
 
 def main():
-    """Main entry point for the dungeon crawler game."""
+    """Main entry point for the ECS dungeon crawler game."""
+    print("🚀 Starting ECS Dungeon Crawler - Phase 2")
+    print("=" * 50)
+    
+    # Initialize Pygame
     pygame.init()
     
     # Initialize display
-    initial_width = INITIAL_VIEWPORT_WIDTH * int(BASE_CELL_SIZE * DEFAULT_ZOOM)
-    initial_height = INITIAL_VIEWPORT_HEIGHT * int(BASE_CELL_SIZE * DEFAULT_ZOOM)
-    screen = pygame.display.set_mode((initial_width, initial_height + HUD_HEIGHT), pygame.RESIZABLE)
-    pygame.display.set_caption("Dungeon Explorer")
+    screen_width = 1024
+    screen_height = 768
+    screen = pygame.display.set_mode((screen_width, screen_height), pygame.RESIZABLE)
+    pygame.display.set_caption("ECS Dungeon Crawler - Phase 2")
     
-    # Initialize game manager
-    game_manager = GameManager(screen)
+    # Initialize ECS game manager
+    game_manager = ECSGameManager(screen)
+    game_manager.load_dungeon_data()  # Will warn if dungeon.json not found
     
     # Main game loop
     clock = pygame.time.Clock()
     running = True
+    
+    print("🎮 Entering main game loop...")
+    print("   Controls: SPACE/ENTER to start, WASD to move, ESC to quit/menu")
     
     try:
         while running:
@@ -31,9 +39,8 @@ def main():
                 if event.type == pygame.QUIT:
                     running = False
                 else:
-                    # Let game manager handle all other events
-                    result = game_manager.handle_event(event)
-                    if result == "quit":
+                    # Let ECS game manager handle events
+                    if not game_manager.handle_event(event):
                         running = False
             
             # Update game state
@@ -41,17 +48,27 @@ def main():
             
             # Render
             game_manager.render()
-            
             pygame.display.flip()
+            
+            # Print debug info occasionally (every 5 seconds)
+            if pygame.time.get_ticks() % 5000 < 16:  # Roughly every 5 seconds
+                debug_info = game_manager.get_debug_info()
+                if debug_info['game_state'] == 'PLAYING':
+                    print(f"   🔧 Debug: {debug_info['world_info']['entity_count']} entities, "
+                          f"Player at {debug_info.get('player_position', 'unknown')}")
     
     except KeyboardInterrupt:
-        print("Game interrupted by user")
+        print("\n⚠️  Game interrupted by user")
     except Exception as e:
-        print(f"Game error: {e}")
+        print(f"\n❌ Game error: {e}")
         import traceback
         traceback.print_exc()
     finally:
+        # Clean shutdown
+        print("\n🔧 Shutting down...")
+        game_manager.shutdown()
         pygame.quit()
+        print("✅ Game shutdown complete")
         sys.exit()
 
 if __name__ == '__main__':
