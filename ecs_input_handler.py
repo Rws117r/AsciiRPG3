@@ -1,4 +1,4 @@
-# ecs_input_handler.py - ECS-based input handling (Phase 3 Fixed)
+# ecs_input_handler.py - ECS-based input handling (Phase 4 Fixed)
 
 import pygame
 from typing import Dict, Callable, Optional
@@ -63,6 +63,7 @@ class ECSInputHandler:
                     new_pos
                 )
                 self.world.add_event(move_event)
+                print(f"Player move: {player_pos.x},{player_pos.y} -> {new_pos[0]},{new_pos[1]}")
                 return True
         
         # Action keys
@@ -73,6 +74,7 @@ class ECSInputHandler:
                 # Create wait event
                 wait_event = WaitEvent(self.player_entity)
                 self.world.add_event(wait_event)
+                print("Player waits")
                 return True
             
             elif action == 'interact':
@@ -85,12 +87,14 @@ class ECSInputHandler:
                         "interact"
                     )
                     self.world.add_event(interact_event)
+                    print("Player interacts")
                     return True
             
             elif action in ['inventory', 'equipment', 'spells']:
                 # Create UI event
                 ui_event = UIEvent(action, self.player_entity)
                 self.world.add_event(ui_event)
+                print(f"Player opens {action}")
                 return True
         
         return False

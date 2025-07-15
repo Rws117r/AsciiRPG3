@@ -1,4 +1,4 @@
-# ecs_game_manager.py - Updated for Phase 4 Rendering
+# ecs_game_manager.py - Fixed for Phase 4 Rendering
 
 import pygame
 import json
@@ -11,10 +11,10 @@ from ecs_systems import *
 from ecs_entities import EntityBuilder, create_test_world
 from ecs_render_coordinator import ECSRenderCoordinator
 from game_constants import GameState, TileType
-from ecs_entities import EntityBuilder, MonsterTemplates, create_test_world  # Added MonsterTemplates import
+from ecs_entities import EntityBuilder, MonsterTemplates, create_test_world
 
 class ECSGameManager:
-    """ECS-based game manager that coordinates all game systems - Phase 4 Update"""
+    """ECS-based game manager that coordinates all game systems - Phase 4 Fixed"""
     
     def __init__(self, screen: pygame.Surface):
         self.screen = screen
@@ -112,12 +112,18 @@ class ECSGameManager:
             if event.key == pygame.K_F1:
                 self.render_coordinator.toggle_debug_info()
                 return True
+            
+            # Main menu escape to quit
+            if self.game_state == GameState.MAIN_MENU and event.key == pygame.K_ESCAPE:
+                return False
         
         if self.game_state == GameState.MAIN_MENU:
             return self._handle_main_menu_event(event)
         elif self.game_state == GameState.PLAYING:
             if hasattr(self, 'input_handler'):
-                return self.input_handler.handle_event(event)
+                # Let input handler process the event
+                self.input_handler.handle_event(event)
+                return True
         
         return True
     
@@ -192,11 +198,13 @@ class ECSGameManager:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE or event.key == pygame.K_RETURN:
                 self.start_new_game()
+                return True
             elif event.key == pygame.K_ESCAPE:
                 return False
         elif event.type == pygame.MOUSEBUTTONDOWN:
             # Simple click-to-start for now
             self.start_new_game()
+            return True
         
         return True
     
@@ -251,97 +259,3 @@ class ECSGameManager:
         print("🔧 ECS Game Manager shutting down...")
         print(f"   Final entity count: {self.world.get_entity_count()}")
         print(f"   Total frames rendered: {self.render_coordinator.frame_count}")
-        
-# main.py - Updated for ECS Phase 4
-
-import pygame
-import sys
-from ecs_game_manager import ECSGameManager
-
-def main():
-    """Main entry point for the ECS dungeon crawler game - Phase 4."""
-    print("🚀 Starting ECS Dungeon Crawler - Phase 4: Rendering & UI")
-    print("=" * 60)
-    
-    # Initialize Pygame
-    pygame.init()
-    
-    # Initialize display
-    screen_width = 1200
-    screen_height = 800
-    screen = pygame.display.set_mode((screen_width, screen_height), pygame.RESIZABLE)
-    pygame.display.set_caption("ECS Dungeon Crawler - Phase 4")
-    
-    # Initialize ECS game manager
-    game_manager = ECSGameManager(screen)
-    game_manager.load_dungeon_data()  # Will warn if dungeon.json not found
-    
-    # Main game loop
-    clock = pygame.time.Clock()
-    running = True
-    last_debug_print = 0
-    
-    print("🎮 Entering main game loop...")
-    print("   Controls:")
-    print("     SPACE/ENTER: Start game")
-    print("     WASD/Arrow keys: Move player")
-    print("     F1: Toggle debug info")
-    print("     ESC: Quit/Menu")
-    print("   Phase 4 Features:")
-    print("     ✓ ECS Rendering System")
-    print("     ✓ Health bars and status effects")
-    print("     ✓ Layered entity rendering")
-    print("     ✓ Camera system")
-    print("     ✓ Performance monitoring")
-    
-    try:
-        while running:
-            dt = clock.tick(60)
-            dt_seconds = dt / 1000.0
-            current_time = pygame.time.get_ticks()
-            
-            # Handle events
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                elif event.type == pygame.VIDEORESIZE:
-                    screen = pygame.display.set_mode(event.size, pygame.RESIZABLE)
-                    game_manager.handle_screen_resize(screen)
-                else:
-                    # Let ECS game manager handle events
-                    if not game_manager.handle_event(event):
-                        running = False
-            
-            # Update game state
-            game_manager.update(dt_seconds)
-            
-            # Render
-            game_manager.render()
-            pygame.display.flip()
-            
-            # Print debug info occasionally (every 5 seconds)
-            if current_time - last_debug_print > 5000:
-                debug_info = game_manager.get_debug_info()
-                if debug_info['game_state'] == 'PLAYING':
-                    print(f"   🔧 Debug: {debug_info['world_info']['entity_count']} entities, "
-                          f"{debug_info['renderable_entities']} visible, "
-                          f"Player at {debug_info.get('player_position', 'unknown')}, "
-                          f"Camera at ({debug_info['camera_position'][0]}, {debug_info['camera_position'][1]})")
-                last_debug_print = current_time
-    
-    except KeyboardInterrupt:
-        print("\n⚠️  Game interrupted by user")
-    except Exception as e:
-        print(f"\n❌ Game error: {e}")
-        import traceback
-        traceback.print_exc()
-    finally:
-        # Clean shutdown
-        print("\n🔧 Shutting down...")
-        game_manager.shutdown()
-        pygame.quit()
-        print("✅ Phase 4 shutdown complete")
-        sys.exit()
-
-if __name__ == '__main__':
-    main()
