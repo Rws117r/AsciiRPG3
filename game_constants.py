@@ -1,4 +1,4 @@
-# game_constants.py - Enhanced with puzzle elements and examination system
+# game_constants.py - Enhanced with examination system and action framework
 from enum import Enum
 from typing import Dict, List
 
@@ -60,6 +60,14 @@ COLOR_EXAMINE_CURSOR = (255, 255, 0)
 COLOR_EXAMINE_HIGHLIGHT = (255, 255, 0, 100)
 COLOR_EXAMINE_TEXTBOX_BG = (0, 0, 0, 200)
 COLOR_ACTION_MENU_BG = (0, 0, 0, 240)
+COLOR_INTERACTION_FEEDBACK = (100, 255, 100)
+COLOR_WARNING_TEXT = (255, 100, 100)
+COLOR_INFO_TEXT = (200, 200, 255)
+
+# Action result colors
+COLOR_SUCCESS = (100, 255, 100)
+COLOR_FAILURE = (255, 100, 100)
+COLOR_NEUTRAL = (200, 200, 200)
 
 # --- UI Icons ---
 UI_ICONS = {
@@ -79,9 +87,19 @@ UI_ICONS = {
     "BARRIER": "≡",
     "STAIRS_DOWN": "∇",
     "CHEST": "⊠",
-    # Examination system
+    # Examination system icons
     "EXAMINE_CURSOR": "✚",
-    "LOOK_ICON": "👁"
+    "LOOK_ICON": "👁",
+    "ACTION_ICON": "⚡",
+    "INTERACTION_ICON": "🤝",
+    "MOVEMENT_ICON": "→",
+    "SPELL_ICON": "✨",
+    "ITEM_ICON": "🎒",
+    "COMBAT_ICON": "⚔",
+    "SUCCESS_ICON": "✓",
+    "FAILURE_ICON": "✗",
+    "WARNING_ICON": "⚠",
+    "INFO_ICON": "ℹ"
 }
 
 # --- Game States ---
@@ -96,7 +114,8 @@ class GameState(Enum):
     CONTAINER_VIEW = 15
     ITEM_ACTION = 16
     COMBAT = 17
-    EXAMINING = 18  # New state for examination mode
+    EXAMINING = 18
+    EXAMINING_ACTION_MENU = 19  # Sub-state for action selection during examination
 
 # --- Tile Types ---
 class TileType(Enum):
@@ -147,3 +166,354 @@ class ActionCategory(Enum):
     ITEM = "item"
     INTERACTION = "interaction"
     COMBAT = "combat"
+
+class ActionResult(Enum):
+    SUCCESS = "success"
+    FAILURE = "failure"
+    PARTIAL = "partial"
+    BLOCKED = "blocked"
+    INVALID = "invalid"
+
+# --- Input Keys for Examination ---
+EXAMINATION_KEYS = {
+    'ACTIVATE': 'l',  # L key to enter examination mode
+    'MOVE_UP': ['up', 'w'],
+    'MOVE_DOWN': ['down', 's'],
+    'MOVE_LEFT': ['left', 'a'],
+    'MOVE_RIGHT': ['right', 'd'],
+    'SELECT': 'return',
+    'CANCEL': 'escape',
+    'CYCLE_ACTIONS': 'tab'
+}
+
+# --- Examination System Constants ---
+EXAMINATION_CONFIG = {
+    'MAX_EXAMINE_DISTANCE': 20,  # Maximum distance for examination
+    'ACTION_MENU_MAX_ITEMS': 8,  # Maximum actions to show in menu
+    'TEXT_WRAP_WIDTH': 350,      # Width for text wrapping in examination boxes
+    'CURSOR_BLINK_RATE': 500,    # Milliseconds for cursor blinking
+    'FEEDBACK_DURATION': 2000,   # How long to show action feedback (ms)
+    'AUTO_CLOSE_DELAY': 5000     # Auto-close examination after inactivity (ms)
+}
+
+# --- Action System Constants ---
+ACTION_REQUIREMENTS = {
+    'TOUCH': {'distance': 1, 'requires_los': True},
+    'PUSH': {'distance': 1, 'requires_los': True, 'requires_strength': True},
+    'CAST_SPELL': {'distance': None, 'requires_los': True, 'requires_mana': True},  # Distance varies by spell
+    'USE_ITEM': {'distance': None, 'requires_los': False},  # Distance varies by item
+    'ATTACK': {'distance': 1, 'requires_los': True, 'requires_weapon': False},
+    'PRAY': {'distance': 1, 'requires_los': True},
+    'OPEN': {'distance': 1, 'requires_los': True},
+    'SEARCH': {'distance': 1, 'requires_los': True}
+}
+
+# --- Spell Range Types ---
+class SpellRange(Enum):
+    SELF = "self"
+    TOUCH = "touch"
+    CLOSE = "close"      # 5 feet / 1 cell
+    NEAR = "near"        # 30 feet / 6 cells  
+    FAR = "far"          # 150 feet / 30 cells
+    SIGHT = "sight"      # Line of sight
+
+# --- Item Range Types ---
+class ItemRange(Enum):
+    TOUCH = 1
+    CLOSE = 1
+    NEAR = 6
+    FAR = 20
+    THROWN = 10
+
+# --- Status Effect Types ---
+class StatusEffect(Enum):
+    ICE_ENCHANTED = "ice_enchanted"
+    BURNING = "burning"
+    ELECTRIFIED = "electrified"
+    SHADOW_TAINTED = "shadow_tainted"
+    PURIFIED = "purified"
+    BLESSED = "blessed"
+    CURSED = "cursed"
+    POISONED = "poisoned"
+    PARALYZED = "paralyzed"
+    CONFUSED = "confused"
+
+# --- Interaction Feedback Messages ---
+INTERACTION_MESSAGES = {
+    'SUCCESS': {
+        'boulder_pushed': "You successfully push the boulder!",
+        'door_opened': "The door swings open.",
+        'chest_opened': "The chest creaks open, revealing its contents.",
+        'altar_prayed': "Your prayer is heard, and you feel blessed.",
+        'trap_disarmed': "You carefully disarm the trap mechanism.",
+        'spell_cast': "The spell takes effect successfully.",
+        'item_used': "You use the item effectively."
+    },
+    'FAILURE': {
+        'boulder_blocked': "The boulder won't budge - something is blocking its path.",
+        'door_locked': "The door is firmly locked.",
+        'chest_trapped': "A trap triggers as you try to open the chest!",
+        'spell_failed': "The spell fizzles out without effect.",
+        'item_ineffective': "The item has no effect here.",
+        'action_impossible': "You cannot perform that action here."
+    },
+    'BLOCKED': {
+        'out_of_range': "You are too far away to do that.",
+        'no_line_of_sight': "You cannot see your target clearly.",
+        'insufficient_resources': "You lack the necessary resources.",
+        'wrong_tool': "You need a different tool for that task."
+    }
+}
+
+# --- Entity Categories for Examination ---
+ENTITY_CATEGORIES = {
+    'INTERACTIVE': ['altar', 'chest', 'door', 'lever', 'button'],
+    'MOVEABLE': ['boulder', 'crate', 'barrel'],
+    'READABLE': ['note', 'book', 'scroll', 'sign'],
+    'MAGICAL': ['glyph', 'rune', 'barrier', 'portal'],
+    'DECORATIVE': ['column', 'statue', 'painting', 'tapestry'],
+    'ENVIRONMENTAL': ['water', 'fire', 'pit', 'wall'],
+    'CREATURE': ['monster', 'npc', 'familiar', 'pet']
+}
+
+# --- Default Entity Descriptions ---
+DEFAULT_DESCRIPTIONS = {
+    'DISTANT': "You can see something there, but you're too far away to make out details.",
+    'UNKNOWN': "You see something here, but you're not sure what it is.",
+    'BLOCKED': "Your view is obstructed.",
+    'DARK': "It's too dark to see clearly.",
+    'EMPTY': "There's nothing special here.",
+    'UNREACHABLE': "You cannot reach that location."
+}
+
+# --- Examination UI Layout ---
+EXAMINATION_UI = {
+    'TEXTBOX_MIN_WIDTH': 300,
+    'TEXTBOX_MAX_WIDTH': 450,
+    'TEXTBOX_MIN_HEIGHT': 100,
+    'TEXTBOX_MAX_HEIGHT': 300,
+    'ACTION_MENU_WIDTH': 280,
+    'ACTION_MENU_MIN_HEIGHT': 120,
+    'PADDING': 15,
+    'BORDER_WIDTH': 2,
+    'TEXT_LINE_HEIGHT': 22,
+    'ACTION_ITEM_HEIGHT': 30
+}
+
+# --- Key Binding Categories ---
+class KeyCategory(Enum):
+    MOVEMENT = "movement"
+    INTERACTION = "interaction"
+    EXAMINATION = "examination"
+    INVENTORY = "inventory"
+    COMBAT = "combat"
+    SYSTEM = "system"
+
+# --- Default Key Bindings ---
+DEFAULT_KEYBINDS = {
+    KeyCategory.MOVEMENT: {
+        'move_north': ['w', 'up'],
+        'move_south': ['s', 'down'],
+        'move_east': ['d', 'right'],
+        'move_west': ['a', 'left'],
+        'wait': ['space', 'period']
+    },
+    KeyCategory.INTERACTION: {
+        'use': ['space'],
+        'get': ['g'],
+        'drop': ['q'],
+        'interact': ['enter']
+    },
+    KeyCategory.EXAMINATION: {
+        'examine': ['l'],
+        'look_around': ['shift+l'],
+        'quick_examine': ['x']
+    },
+    KeyCategory.INVENTORY: {
+        'inventory': ['i'],
+        'equipment': ['e'],
+        'quiver': ['q'],
+        'spells': ['m']
+    },
+    KeyCategory.COMBAT: {
+        'attack': ['return'],
+        'defend': ['space'],
+        'flee': ['shift+f']
+    },
+    KeyCategory.SYSTEM: {
+        'fullscreen': ['f11'],
+        'zoom_in': ['plus', 'equals'],
+        'zoom_out': ['minus'],
+        'escape': ['escape'],
+        'help': ['f1', 'h']
+    }
+}
+
+# --- Difficulty Settings ---
+class Difficulty(Enum):
+    EASY = "easy"
+    NORMAL = "normal" 
+    HARD = "hard"
+    NIGHTMARE = "nightmare"
+
+DIFFICULTY_MODIFIERS = {
+    Difficulty.EASY: {
+        'monster_health': 0.75,
+        'monster_damage': 0.75,
+        'trap_damage': 0.5,
+        'puzzle_hints': True,
+        'examination_range': 1.5
+    },
+    Difficulty.NORMAL: {
+        'monster_health': 1.0,
+        'monster_damage': 1.0,
+        'trap_damage': 1.0,
+        'puzzle_hints': False,
+        'examination_range': 1.0
+    },
+    Difficulty.HARD: {
+        'monster_health': 1.25,
+        'monster_damage': 1.25,
+        'trap_damage': 1.5,
+        'puzzle_hints': False,
+        'examination_range': 0.75
+    },
+    Difficulty.NIGHTMARE: {
+        'monster_health': 1.5,
+        'monster_damage': 1.5,
+        'trap_damage': 2.0,
+        'puzzle_hints': False,
+        'examination_range': 0.5
+    }
+}
+
+# --- Audio Cues (for future sound system) ---
+AUDIO_CUES = {
+    'EXAMINATION': {
+        'cursor_move': 'ui_cursor_move.wav',
+        'item_select': 'ui_item_select.wav',
+        'action_confirm': 'ui_action_confirm.wav',
+        'action_cancel': 'ui_action_cancel.wav',
+        'examine_start': 'ui_examine_start.wav',
+        'examine_end': 'ui_examine_end.wav'
+    },
+    'INTERACTION': {
+        'door_open': 'world_door_open.wav',
+        'door_close': 'world_door_close.wav',
+        'chest_open': 'world_chest_open.wav',
+        'boulder_push': 'world_boulder_push.wav',
+        'altar_pray': 'world_altar_pray.wav',
+        'trap_trigger': 'world_trap_trigger.wav',
+        'spell_cast': 'magic_spell_cast.wav',
+        'item_use': 'inventory_item_use.wav',
+        'success': 'ui_success.wav',
+        'failure': 'ui_failure.wav'
+    },
+    'PUZZLE': {
+        'pressure_plate_activate': 'puzzle_pressure_plate_on.wav',
+        'pressure_plate_deactivate': 'puzzle_pressure_plate_off.wav',
+        'glyph_activate': 'puzzle_glyph_glow.wav',
+        'barrier_deactivate': 'puzzle_barrier_down.wav',
+        'puzzle_solved': 'puzzle_complete.wav'
+    }
+}
+
+# --- Accessibility Options ---
+ACCESSIBILITY = {
+    'HIGH_CONTRAST': False,
+    'LARGE_TEXT': False,
+    'COLORBLIND_FRIENDLY': False,
+    'SCREEN_READER_SUPPORT': False,
+    'REDUCED_MOTION': False,
+    'AUDIO_CUES_ENABLED': True,
+    'EXAMINATION_HINTS': True,
+    'AUTO_PAUSE_ON_EXAMINE': True
+}
+
+# --- Debug Options ---
+DEBUG_OPTIONS = {
+    'SHOW_COORDINATES': False,
+    'SHOW_ENTITY_IDS': False,
+    'SHOW_ACTION_REQUIREMENTS': False,
+    'LOG_INTERACTIONS': True,
+    'HIGHLIGHT_WALKABLE': False,
+    'SHOW_LINE_OF_SIGHT': False,
+    'EXAMINATION_DEBUG': False
+}
+
+# --- Performance Settings ---
+PERFORMANCE = {
+    'MAX_VISIBLE_ENTITIES': 100,
+    'EXAMINATION_UPDATE_RATE': 60,  # FPS for examination cursor updates
+    'UI_ANIMATION_SPEED': 1.0,
+    'PARTICLE_DENSITY': 1.0,
+    'EFFECT_QUALITY': 'high'  # low, medium, high, ultra
+}
+
+# --- Localization Support ---
+class Language(Enum):
+    ENGLISH = "en"
+    SPANISH = "es" 
+    FRENCH = "fr"
+    GERMAN = "de"
+    ITALIAN = "it"
+    PORTUGUESE = "pt"
+    RUSSIAN = "ru"
+    JAPANESE = "ja"
+    CHINESE = "zh"
+
+# Text keys for localization
+TEXT_KEYS = {
+    'EXAMINATION': {
+        'MODE_ACTIVATED': 'examination.mode_activated',
+        'MODE_DEACTIVATED': 'examination.mode_deactivated',
+        'NO_TARGET': 'examination.no_target',
+        'OUT_OF_RANGE': 'examination.out_of_range',
+        'SELECT_ACTION': 'examination.select_action',
+        'DISTANCE_INDICATOR': 'examination.distance_indicator'
+    },
+    'ACTIONS': {
+        'TOUCH': 'action.touch',
+        'PUSH': 'action.push',
+        'PRAY': 'action.pray',
+        'OPEN': 'action.open',
+        'SEARCH': 'action.search',
+        'CAST_SPELL': 'action.cast_spell',
+        'USE_ITEM': 'action.use_item',
+        'ATTACK': 'action.attack'
+    },
+    'FEEDBACK': {
+        'SUCCESS': 'feedback.success',
+        'FAILURE': 'feedback.failure',
+        'BLOCKED': 'feedback.blocked',
+        'INVALID': 'feedback.invalid'
+    },
+    'UI': {
+        'AVAILABLE_ACTIONS': 'ui.available_actions',
+        'DISTANCE': 'ui.distance',
+        'REQUIREMENTS': 'ui.requirements',
+        'EFFECTS': 'ui.effects'
+    }
+}
+
+# --- Version Information ---
+GAME_VERSION = {
+    'MAJOR': 1,
+    'MINOR': 0,
+    'PATCH': 0,
+    'BUILD': 'alpha',
+    'EXAMINATION_SYSTEM_VERSION': '1.0.0'
+}
+
+# --- Feature Flags ---
+FEATURE_FLAGS = {
+    'EXAMINATION_SYSTEM': True,
+    'ADVANCED_INTERACTIONS': True,
+    'CONTEXTUAL_ACTIONS': True,
+    'DYNAMIC_DESCRIPTIONS': True,
+    'ACTION_HISTORY': True,
+    'SMART_TARGETING': True,
+    'GESTURE_COMMANDS': False,  # Future feature
+    'VOICE_COMMANDS': False,    # Future feature
+    'VR_SUPPORT': False         # Future feature
+}

@@ -1,4 +1,4 @@
-# ui_systems.py - All UI rendering and inventory/equipment systems
+# ui_systems.py - Updated version with examination system support
 import pygame
 import time
 from typing import List, Tuple, Dict, Optional
@@ -250,7 +250,10 @@ def format_item_cost(item) -> str:
         return "Priceless"
 
 def wrap_text(text: str, max_width: int, font: pygame.font.Font) -> List[str]:
-    """Wrap text to fit within max_width"""
+    """Wrap text to fit within max_width - Enhanced for examination system"""
+    if not text:
+        return []
+    
     words = text.split(' ')
     lines = []
     current_line = ""
@@ -265,11 +268,49 @@ def wrap_text(text: str, max_width: int, font: pygame.font.Font) -> List[str]:
             if current_line:
                 lines.append(current_line)
             current_line = word
+            
+            # Handle very long words that don't fit on a line
+            while font.size(current_line)[0] > max_width and len(current_line) > 1:
+                # Break the word
+                for i in range(len(current_line) - 1, 0, -1):
+                    if font.size(current_line[:i] + "-")[0] <= max_width:
+                        lines.append(current_line[:i] + "-")
+                        current_line = current_line[i:]
+                        break
+                else:
+                    # Single character that's too wide - just add it
+                    lines.append(current_line)
+                    current_line = ""
+                    break
     
     if current_line:
         lines.append(current_line)
     
     return lines
+
+def draw_text_with_background(surface: pygame.Surface, text: str, font: pygame.font.Font,
+                            text_color: Tuple[int, int, int], bg_color: Tuple[int, int, int],
+                            pos: Tuple[int, int], padding: int = 5) -> pygame.Rect:
+    """Draw text with a background rectangle - Useful for examination system"""
+    text_surf = font.render(text, True, text_color)
+    text_rect = text_surf.get_rect(topleft=pos)
+    
+    # Draw background
+    bg_rect = text_rect.inflate(padding * 2, padding * 2)
+    pygame.draw.rect(surface, bg_color, bg_rect)
+    pygame.draw.rect(surface, text_color, bg_rect, 1)
+    
+    # Draw text
+    surface.blit(text_surf, text_rect)
+    
+    return bg_rect
+
+def draw_bordered_rect(surface: pygame.Surface, rect: pygame.Rect, 
+                      fill_color: Tuple[int, int, int], border_color: Tuple[int, int, int], 
+                      border_width: int = 2):
+    """Draw a rectangle with border - Useful for examination system UI"""
+    pygame.draw.rect(surface, fill_color, rect)
+    pygame.draw.rect(surface, border_color, rect, border_width)
 
 # --- Drawing Functions ---
 def draw_main_menu(surface: pygame.Surface, large_font, medium_font):
@@ -433,7 +474,95 @@ def draw_spell_menu(surface: pygame.Surface, font: pygame.font.Font, spells: Lis
         spell_rect = spell_surf.get_rect(left=menu_rect.left + 20, top=title_rect.bottom + 10 + (i * 30))
         surface.blit(spell_surf, spell_rect)
 
-# Inventory UI functions
+# Enhanced UI functions for examination system
+def draw_examination_overlay(surface: pygame.Surface, font: pygame.font.Font, 
+                           examination_text: List[str], cursor_pos: Tuple[int, int]):
+    """Draw examination overlay with cursor and text"""
+    screen_width, screen_height = surface.get_size()
+    
+    # Draw examination text box
+    if examination_text:
+        box_width = 350
+        box_height = min(200, len(examination_text) * 25 + 40)
+        box_x = cursor_pos[0] + 20
+        box_y = cursor_pos[1] - box_height - 20
+        
+        # Keep box on screen
+        if box_x + box_width > screen_width:
+            box_x = cursor_pos[0] - box_width - 20
+        if box_y < 0:
+            box_y = cursor_pos[1] + 20
+        
+        box_rect = pygame.Rect(box_x, box_y, box_width, box_height)
+        
+        # Draw background with transparency
+        overlay_surface = pygame.Surface((box_width, box_height), pygame.SRCALPHA)
+        overlay_surface.fill(COLOR_EXAMINE_TEXTBOX_BG)
+        surface.blit(overlay_surface, (box_x, box_y))
+        
+        # Draw border
+        pygame.draw.rect(surface, COLOR_WHITE, box_rect, 2)
+        
+        # Draw text
+        text_y = box_y + 15
+        for line in examination_text:
+            if line.startswith("**") and line.endswith("**"):
+                # Title line
+                title_text = line[2:-2]
+                text_surf = font.render(title_text, True, COLOR_WHITE)
+            else:
+                text_surf = font.render(line, True, COLOR_WHITE)
+            
+            surface.blit(text_surf, (box_x + 15, text_y))
+            text_y += 22
+
+def draw_action_selection_menu(surface: pygame.Surface, font: pygame.font.Font,
+                              actions: List[str], selected_index: int, pos: Tuple[int, int]):
+    """Draw action selection menu for examination system"""
+    if not actions:
+        return
+    
+    menu_width = 250
+    menu_height = len(actions) * 30 + 40
+    menu_x, menu_y = pos
+    
+    # Keep menu on screen
+    screen_width, screen_height = surface.get_size()
+    if menu_x + menu_width > screen_width:
+        menu_x = screen_width - menu_width - 10
+    if menu_y + menu_height > screen_height:
+        menu_y = screen_height - menu_height - 10
+    
+    menu_rect = pygame.Rect(menu_x, menu_y, menu_width, menu_height)
+    
+    # Draw background
+    overlay_surface = pygame.Surface((menu_width, menu_height), pygame.SRCALPHA)
+    overlay_surface.fill(COLOR_ACTION_MENU_BG)
+    surface.blit(overlay_surface, (menu_x, menu_y))
+    
+    # Draw border
+    pygame.draw.rect(surface, COLOR_WHITE, menu_rect, 2)
+    
+    # Draw title
+    title_surf = font.render("Available Actions", True, COLOR_WHITE)
+    title_rect = title_surf.get_rect(centerx=menu_rect.centerx, top=menu_y + 10)
+    surface.blit(title_surf, title_rect)
+    
+    # Draw actions
+    action_y = title_rect.bottom + 10
+    for i, action in enumerate(actions):
+        # Highlight selected action
+        if i == selected_index:
+            highlight_rect = pygame.Rect(menu_x + 5, action_y - 2, menu_width - 10, 25)
+            pygame.draw.rect(surface, COLOR_SELECTED_ITEM, highlight_rect)
+            pygame.draw.rect(surface, COLOR_WHITE, highlight_rect, 1)
+        
+        color = COLOR_BLACK if i == selected_index else COLOR_WHITE
+        action_surf = font.render(action, True, color)
+        surface.blit(action_surf, (menu_x + 15, action_y))
+        action_y += 30
+
+# Inventory UI functions (keeping existing functionality)
 def draw_inventory_screen(surface: pygame.Surface, player: Player, selected_index: int, 
                          font: pygame.font.Font, small_font: pygame.font.Font):
     """Draw inventory management screen showing containers"""
